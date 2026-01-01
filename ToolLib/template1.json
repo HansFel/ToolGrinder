@@ -1,0 +1,43 @@
+{
+  "maschine": {
+    "safe_z": 20.0,
+    "start_x": 0.0,
+    "start_y": 0.0,
+    "a_start": 0.0,
+    "a_end": 360.0,
+    "a_steps": 360,
+    "feed_traverse": 800.0,
+    "nullpunkt": {
+      "code": "G54",
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0,
+      "a": 0.0
+    }
+  },
+  "schleifscheibe": {
+    "durchmesser": 100.0,
+    "drehzahl": 3000,
+    "schleifvorschub": 200.0,
+    "zustellung_pro_pass": 0.05,
+    "max_tiefe": -1.0,
+    "anzahl_passe": 20,
+    "start_end_only": true,
+    "lift_after_pass": 1.5
+  },
+  "werkzeug": {
+    "durchmesser": 10.0,
+    "schneidenanzahl": 4,
+    "drall_grad_pro_mm": 2.0,
+    "schneidenlaenge": 10.0,
+    "schneiden_schritte": 100,
+    "tool_number": 1,
+    "ruecken_grad": 5.0,
+    "ruecken_tiefe_delta": 0.2,
+    "ruecken_schritte": 10,
+    "ruecken_anteil": 0.05
+  },
+  "ausgabe": {
+    "datei": "fraeser_schaerfen.ngc"
+  }
+}
