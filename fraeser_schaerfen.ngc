@@ -1,14 +1,16 @@
-(Fräser Schärfen – automatisch generiert)
+(FrÃ¤ser SchÃ¤rfen â€“ automatisch generiert)
 G21   (mm)
 G90   (absolute Positionierung)
 G17   (XY-Ebene)
 G0 Z20.000
-G0 X0.000 Y0.000 A0.000
 T1 M6   (Werkzeugwechsel)
-G54   (Werkstücknullpunkt)
+G0 X0.000 Y0.000 A0.000
+G54   (WerkstÃ¼cknullpunkt)
 G0 X0.000 Y0.000 Z0.000 A0.000
 S3000 M3   (Spindel EIN, Schleifscheibe)
 
+M3 S3000   (Spindel ein)
+G4 P1.0
 (Schleifdurchgang 1, Z=-0.050)
 G1 Z-0.050 F200.000
 (Schneide 1)

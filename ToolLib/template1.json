@@ -39,5 +39,19 @@
   },
   "ausgabe": {
     "datei": "fraeser_schaerfen.ngc"
+  },
+  "front": {
+    "zustellung_pro_pass": 0.01,
+    "max_tiefe": -0.5,
+    "x_start": 0.0,
+    "x_end": 3.0,
+    "z_sicher": 5.0,
+    "feed": 200.0,
+    "spindle": 3000,
+    "ausgabe_datei": "fraeser_front.ngc",
+    "retract_x": 5.0,
+    "spindle_on_first_pass": true,
+    "spindle_dwell_ms": 1000,
+    "cutting_angle": 3.0
   }
 }
