@@ -1,0 +1,257 @@
+:root {
+    color-scheme: light;
+    --bg: #eef2f5;
+    --panel: #ffffff;
+    --ink: #17202a;
+    --muted: #637083;
+    --line: #d8dee8;
+    --accent: #166e63;
+    --accent-dark: #0e5149;
+    --warn: #ad6418;
+    --code: #111821;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+}
+
+.topbar {
+    min-height: 72px;
+    padding: 14px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    background: #1c2733;
+    color: #fff;
+    border-bottom: 4px solid var(--accent);
+}
+
+.topbar h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+.topbar p {
+    margin: 4px 0 0;
+    color: #c9d2dc;
+}
+
+.status {
+    min-width: 140px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 6px;
+    text-align: center;
+    color: #e7edf3;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 340px minmax(420px, 1fr) minmax(360px, .9fr);
+    gap: 14px;
+    padding: 14px;
+    height: calc(100vh - 76px);
+}
+
+.panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.controls {
+    padding: 16px;
+    overflow: auto;
+}
+
+.field {
+    margin-bottom: 16px;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+}
+
+select,
+input,
+textarea,
+button {
+    font: inherit;
+}
+
+select,
+input {
+    width: 100%;
+    min-height: 38px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+}
+
+.segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    overflow: hidden;
+    margin-top: 6px;
+}
+
+.segmented input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.segmented label {
+    min-height: 38px;
+    display: grid;
+    place-items: center;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.segmented label:last-child {
+    border-right: 0;
+}
+
+.segmented input:checked + label {
+    background: var(--accent);
+    color: #fff;
+}
+
+.quick-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+button {
+    min-height: 38px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #f8fafc;
+    color: #243244;
+    cursor: pointer;
+    font-weight: 650;
+}
+
+button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+button:hover {
+    filter: brightness(.97);
+}
+
+.panel-title {
+    height: 48px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 700;
+    color: #263241;
+}
+
+.editor-panel,
+.preview-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+textarea,
+pre {
+    flex: 1;
+    width: 100%;
+    margin: 0;
+    border: 0;
+    resize: none;
+    outline: none;
+    padding: 14px;
+    font: 13px/1.45 Consolas, "Cascadia Mono", monospace;
+    overflow: auto;
+}
+
+textarea {
+    color: var(--code);
+    background: #fbfdff;
+}
+
+pre {
+    color: #dce8f2;
+    background: var(--code);
+    white-space: pre;
+}
+
+.output-list {
+    display: grid;
+    gap: 8px;
+}
+
+.output-item {
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #f8fafc;
+}
+
+.output-item strong {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.output-item a {
+    color: var(--accent-dark);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.error {
+    color: #8a2c22;
+    background: #fff1ef;
+    border-color: #f0beb8;
+}
+
+@media (max-width: 1100px) {
+    .layout {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .editor-panel,
+    .preview-panel {
+        min-height: 420px;
+    }
+}

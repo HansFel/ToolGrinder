@@ -1,0 +1,13 @@
+.git
+.venv
+build
+dist
+__pycache__
+*.pyc
+*.pyo
+*.spec
+data
+*.ngc
+.grinder_last_config.json
+.grinder_servers.json
+.temp_test_key*

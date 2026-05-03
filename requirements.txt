@@ -2,3 +2,5 @@ python-docx
 paramiko
 keyring
 secretstorage
+Flask
+gunicorn

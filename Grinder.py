@@ -117,11 +117,13 @@ def choose_config(initial_path=None):
 def validate_front_config(cfg):
     """Validate 'front' section in configuration. Returns (True, []) or (False, [errors]).
     Module-level function so it can be reused by FrontGrinder and tests.
+    Supports both old and new JSON structure.
     """
     errors = []
-    f = cfg.get('front')
+    # Support new structure: aktionen.front or old structure: front
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front')
     if not f:
-        errors.append('Missing section "front"')
+        errors.append('Missing section "aktionen.front" or "front"')
         return False, errors
     # x_start / x_end
     try:
@@ -131,13 +133,14 @@ def validate_front_config(cfg):
             errors.append('front.x_end must be greater than front.x_start')
     except Exception:
         errors.append('front.x_start and front.x_end must be numbers')
-    # max_tiefe
-    try:
-        max_tiefe = float(f.get('max_tiefe', -1.0))
-        if max_tiefe >= 0:
-            errors.append('front.max_tiefe should be negative (depth)')
-    except Exception:
-        errors.append('front.max_tiefe must be a number')
+    # max_tiefe (optional in new structure)
+    if 'max_tiefe' in f:
+        try:
+            max_tiefe = float(f.get('max_tiefe', -1.0))
+            if max_tiefe >= 0:
+                errors.append('front.max_tiefe should be negative (depth)')
+        except Exception:
+            errors.append('front.max_tiefe must be a number')
     # zustellung_pro_pass
     try:
         zp = float(f.get('zustellung_pro_pass', 0.0))
@@ -145,36 +148,46 @@ def validate_front_config(cfg):
             errors.append('front.zustellung_pro_pass must be > 0')
     except Exception:
         errors.append('front.zustellung_pro_pass must be a number')
-    # feed / spindle
+    # feed
     try:
         feed = float(f.get('feed', 0.0))
         if feed <= 0:
             errors.append('front.feed must be > 0')
     except Exception:
         errors.append('front.feed must be a number')
+    # spindle - check in schleifscheibe_Front or old structure
     try:
-        spindle = float(f.get('spindle', 0.0))
+        if 'schleifscheibe_Front' in cfg:
+            spindle = float(cfg['schleifscheibe_Front'].get('drehzahl', 0.0))
+        else:
+            spindle = float(f.get('spindle', 0.0))
         if spindle <= 0:
-            errors.append('front.spindle must be > 0')
+            errors.append('schleifscheibe_Front.drehzahl or front.spindle must be > 0')
     except Exception:
-        errors.append('front.spindle must be a number')
-    if not f.get('ausgabe_datei'):
-        errors.append('front.ausgabe_datei must be set')
+        errors.append('schleifscheibe_Front.drehzahl or front.spindle must be a number')
+    # ausgabe_datei is optional (has fallback in code)
+    # No need to validate it as required
     # Werkzeug diameter required for radius-based plunge
     try:
-        diam = float(cfg.get('werkzeug', {}).get('durchmesser', 0.0))
+        if 'fraeser' in cfg:
+            diam = float(cfg['fraeser'].get('durchmesser', 0.0))
+        else:
+            w = cfg.get('werkzeug_front', cfg.get('werkzeug', {}))
+            diam = float(w.get('durchmesser', 0.0))
         if diam <= 0:
-            errors.append('werkzeug.durchmesser must be > 0 (required for radius-based plunge)')
+            errors.append('fraeser.durchmesser (or werkzeug_front/werkzeug.durchmesser) must be > 0 (required for radius-based plunge)')
     except Exception:
-        errors.append('werkzeug.durchmesser must be a number')
+        errors.append('fraeser.durchmesser must be a number')
     return (len(errors) == 0, errors)
 
 
 def compute_front_start_positions(cfg):
     """Compute list of (pass_index, start_x, depth) tuples for front passes.
     Depth is always 0 (not used anymore), computed as number of passes from (x_end - x_start) / zustellung_pro_pass.
+    Supports both old and new JSON structure.
     """
-    f = cfg.get('front', {})
+    # Support new structure: aktionen.front or old structure: front
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front', {})
     if not f:
         return []
     base_x = float(f.get('x_start', 0.0))
@@ -196,41 +209,65 @@ def compute_front_start_positions(cfg):
     return starts
 
 
+def werkzeug_radius(cfg):
+    """Radius des zu schleifenden Werkzeugs.
+
+    Maschinenkonvention: Z0 liegt im Drehmittelpunkt des Werkzeugs, die obere
+    Tangente liegt bei +Radius. Bestehende Einstellwerte fuer Zustellung und
+    Sicherheitsabstand bleiben bedienseitig relativ zur oberen Tangente und
+    werden vor der Ausgabe in Maschinen-Z umgerechnet.
+    """
+    if 'fraeser' in cfg:
+        w = cfg['fraeser']
+    else:
+        w = cfg.get('werkzeug_front', cfg.get('werkzeug_edge', cfg.get('werkzeug', {})))
+    return float(w.get('durchmesser', 0.0)) / 2.0
+
+
+def z_von_oberer_tangente(cfg, z_rel):
+    """Konvertiert alte/top-bezogene Z-Werte auf Z0 im Werkzeug-Drehmittelpunkt."""
+    return werkzeug_radius(cfg) + float(z_rel)
+
+
 # -------------------------------------------------
 # FRONT G-CODE GENERATOR: FRONTFLÄCHEN SCHÄRFEN
 # -------------------------------------------------
 
-def gcode_front_header(cfg):
+def gcode_front_header(cfg, config_file=None):
+    from datetime import datetime
     m = cfg.get('maschine', {})
-    f = cfg.get('front', {})
-    s = cfg.get('schleifscheibe', {})
+    # Support new structure: aktionen.front or old structure: front
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front', {})
+    # Support new structure: schleifscheibe_Front or old structure: schleifscheibe
+    s = cfg.get('schleifscheibe_Front', cfg.get('schleifscheibe', {}))
     lines = []
     lines.append('%')
     lines.append('(Front-Grinder G-Code)')
+    lines.append(f"(Erstellt: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')})")
+    if config_file:
+        lines.append(f"(Vorlage: {config_file})")
     if m.get('nullpunkt') and m['nullpunkt'].get('code'):
         lines.append(m['nullpunkt']['code'])
-    # Werkzeugwechsel (optional)
-    w = cfg.get('werkzeug', {})
-    tool_no = w.get('tool_number')
+    # Werkzeugwechsel (optional) - use schleifscheibe_Front if available
+    tool_no = s.get('tool_number')
     if tool_no is not None:
         try:
             tn = int(tool_no)
-            lines.append(f"T{tn} M6   (Werkzeugwechsel)")
+            lines.append(f"T{tn} M6   (Werkzeugwechsel Front)")
         except Exception:
             lines.append(f"(Ungültige tool_number: {tool_no})")
-    # Anfahren der Sicherheitshöhe (Spindel-Start kann auf den ersten Pass verschoben werden)
-    lines.append(f"G0 Z{f.get('z_sicher', 5.0)}")
-    # Spindelstart hier nur, wenn nicht auf ersten Pass verschoben
-    if not f.get('spindle_on_first_pass', True):
-        sp = f.get('spindle')
-        if sp:
-            try:
-                sv = int(sp)
-                lines.append(f"M3 S{sv}   (Spindel ein)")
-                dwell = int(f.get('spindle_dwell_ms', 1000))
-                lines.append(f"G4 P{dwell/1000.0}")
-            except Exception:
-                lines.append(f"(Ungültiger Spindelwert: {sp})")
+    # Anfahren der Sicherheitshöhe
+    lines.append(f"G0 Z{z_von_oberer_tangente(cfg, f.get('z_sicher', 5.0)):.3f}")
+    # Spindel starten in Sicherheitshöhe
+    sp = s.get('drehzahl', f.get('spindle'))
+    if sp:
+        try:
+            sv = int(sp)
+            lines.append(f"M3 S{sv}   (Spindel ein)")
+            dwell = int(f.get('spindle_dwell_ms', 1000))
+            lines.append(f"G4 P{dwell/1000.0}")
+        except Exception:
+            lines.append(f"(Ungültiger Spindelwert: {sp})")
     lines.append('G90 G94')
     
     # Calculate and move to Y offset position (once at start)
@@ -248,13 +285,20 @@ def gcode_front_header(cfg):
 
 
 def gcode_front_pass(cfg, idx, tiefe, start_x=None):
-    f = cfg.get('front', {})
-    w = cfg.get('werkzeug', {})
+    # Support new structure: aktionen.front or old structure: front
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front', {})
+    # Support new structure: fraeser or old structure: werkzeug_front/werkzeug
+    if 'fraeser' in cfg:
+        w = cfg['fraeser']
+    else:
+        w = cfg.get('werkzeug_front', cfg.get('werkzeug', {}))
+    # Support new structure: schleifscheibe_Front or old structure: schleifscheibe
+    s = cfg.get('schleifscheibe_Front', cfg.get('schleifscheibe', {}))
     m = cfg.get('maschine', {})
     lines = []
     base_x1 = f.get('x_start', 0.0)
     feed = f.get('feed', 200.0)
-    z_sicher = f.get('z_sicher', 5.0)
+    z_sicher = z_von_oberer_tangente(cfg, f.get('z_sicher', 5.0))
     retract_x = f.get('retract_x', m.get('safe_z', 5.0))
 
     # Determine actual start X for this pass
@@ -266,26 +310,19 @@ def gcode_front_pass(cfg, idx, tiefe, start_x=None):
     # Tool radius
     radius = float(w.get('durchmesser', 0.0)) / 2.0
     # Z plunge: nur Fräserradius (nicht mehr depth-abhängig)
-    z_plunge = -radius
+    z_plunge = 0.0
     
     # X Sicherheitsabstand (in Minus-Richtung vom Startpunkt)
     x_safe = x1 - float(retract_x)
+    
+    # Rückzugshöhe für sichere X-Bewegung (aus schleifscheibe_Front oder Fallback)
+    safe_z_retract = z_von_oberer_tangente(
+        cfg, s.get('rueckzug_hoehe_Z', f.get('rueckzug_hoehe_Z', 2.0))
+    )
 
     # Vorbereitung: Anfahrt zum Startpunkt bei Sicherheitshöhe
     lines.append(f"(Pass {idx} at X {x1})")
-    lines.append(f"G0 X{x1} Z{z_sicher}")
-    
-    # Start spindle before first pass if spindle_on_first_pass is True
-    if idx == 1 and f.get('spindle_on_first_pass', True):
-        sp = f.get('spindle')
-        if sp:
-            try:
-                sv = int(sp)
-                lines.append(f"M3 S{sv}   (Spindel ein)")
-                dwell = int(f.get('spindle_dwell_ms', 1000))
-                lines.append(f"G4 P{dwell/1000.0}")
-            except Exception:
-                pass
+    lines.append(f"G0 X{x1} Z{z_sicher:.3f}")
     
     # Für jede Schneide: Z senken → X minus → Z heben
     anz = int(w.get('schneidenanzahl', 1))
@@ -298,39 +335,45 @@ def gcode_front_pass(cfg, idx, tiefe, start_x=None):
         # Rotation zur Schneide
         lines.append(f"G0 A{a_pos:.3f}")
         # Z senken bis Fräserradius-Tiefe
-        lines.append(f"G1 Z{z_plunge} F{feed}")
+        lines.append(f"G1 Z{z_plunge:.3f} F{feed}")
         # X in Minus-Richtung auf Sicherheitsabstand
         lines.append(f"G1 X{x_safe} F{feed}")
-        # Z heben bis Sicherheitsabstand
-        lines.append(f"G0 Z{z_sicher}")
+        # Z heben auf sichere Höhe (Z0 + Sicherheitsabstand) um Schneidekante zu schützen
+        lines.append(f"G0 Z{safe_z_retract:.3f}")
         # Zurück zur Startposition X (für nächste Schneide)
         lines.append(f"G0 X{x1}")
+        # Z auf Arbeitshöhe für nächste Schneide (nur wenn nicht letzte Schneide)
+        if sch < anz - 1:
+            lines.append(f"G0 Z{z_sicher:.3f}")
     
     return lines
 
 
 def gcode_front_footer(cfg):
     m = cfg.get('maschine', {})
-    f = cfg.get('front', {})
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front', {})
     lines = []
     # Return to start Y position
     y_start = m.get('start_y', 0.0)
     lines.append(f'G0 Y{y_start}')
-    lines.append('G0 Z{0}'.format(f.get('z_sicher', 5.0)))
+    lines.append('G0 Z{0:.3f}'.format(z_von_oberer_tangente(cfg, f.get('z_sicher', 5.0))))
     lines.append('M5')
     lines.append('M30')
     return lines
 
 
-def generiere_front_gcode(cfg):
-    """Generate front-face grinding G-Code."""
-    f = cfg.get('front')
+def generiere_front_gcode(cfg, config_file=None):
+    """Generate front-face grinding G-Code. Supports both old and new JSON structure."""
+    # Support new structure: aktionen.front or old structure: front
+    f = cfg.get('aktionen', {}).get('front') if 'aktionen' in cfg else cfg.get('front')
     if not f:
-        raise ValueError('Keine Section "front" in der Konfiguration gefunden.')
+        raise ValueError('Keine Section "aktionen.front" oder "front" in der Konfiguration gefunden.')
+    
+    # ausgabe_datei from front section or fallback to ausgabe.datei
     ausgabe = f.get('ausgabe_datei') or cfg.get('ausgabe', {}).get('datei', 'fraeser_front.ngc')
 
     lines = []
-    lines += gcode_front_header(cfg)
+    lines += gcode_front_header(cfg, config_file)
 
     base_x = f.get('x_start', 0.0)
     x_end = f.get('x_end', 10.0)
@@ -405,9 +448,106 @@ def edit_config_gui(path):
             # Update last path
             save_last_config_path(final_path)
 
+    def on_create_template():
+        """Erstellt ein neues JSON-Template mit Standardwerten"""
+        nonlocal final_path
+        if not saved['flag']:
+            response = messagebox.askyesnocancel(
+                'Nicht gespeicherte Änderungen',
+                'Es gibt nicht gespeicherte Änderungen. Möchten Sie diese speichern?'
+            )
+            if response is None:  # Cancel
+                return
+            if response:  # Yes
+                if not do_save(final_path):
+                    on_save_as()
+        
+        # Template-Struktur
+        template = {
+            "maschine": {
+                "safe_z": 20.0,
+                "start_x": 0.0,
+                "start_y": 0.0,
+                "a_start": 0.0,
+                "a_end": 360.0,
+                "a_steps": 360,
+                "feed_traverse": 800.0,
+                "nullpunkt": {
+                    "code": "G54",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0,
+                    "a": 0.0
+                }
+            },
+            "schleifscheibe_Schneiden": {
+                "durchmesser": 100.0,
+                "drehzahl": 3000,
+                "tool_number": 1,
+                "schleifvorschub": 200.0,
+                "zustellung_pro_pass": 0.05
+            },
+            "schleifscheibe_Front": {
+                "durchmesser": 80.0,
+                "drehzahl": 3500,
+                "tool_number": 2,
+                "schleifvorschub": 200.0,
+                "rueckzug_hoehe_Z": 2.0
+            },
+            "fraeser": {
+                "durchmesser": 12.0,
+                "schneidenanzahl": 4,
+                "drall_grad_pro_mm": 2.0,
+                "schneidenlaenge": 10.0
+            },
+            "aktionen": {
+                "schneiden": {
+                    "durchmesser_geschaerft": 11.5,
+                    "zustellung_pro_pass": 0.05,
+                    "erster_ruecken_grad": 20.0,
+                    "ruecken_grad": 220.0,
+                    "ruecken_tiefe_delta": 0.02,
+                    "ruecken_schritte": 10,
+                    "feed": 200.0,
+                    "ausgabe_datei": "fraeser_kanten.ngc"
+                },
+                "front": {
+                    "zustellung_pro_pass": 0.01,
+                    "max_tiefe": -0.5,
+                    "x_start": 0.0,
+                    "x_end": 3.0,
+                    "z_sicher": 5.0,
+                    "feed": 200.0,
+                    "ausgabe_datei": "fraeser_front.ngc",
+                    "retract_x": 1.0,
+                    "spindle_on_first_pass": True,
+                    "spindle_dwell_ms": 1000,
+                    "cutting_angle": 3.0
+                }
+            }
+        }
+        
+        # Template im Editor anzeigen
+        pretty = json.dumps(template, indent=4, ensure_ascii=False)
+        text.delete('1.0', 'end')
+        text.insert('1.0', pretty)
+        apply_syntax_highlight()
+        update_line_numbers()
+        update_status()
+        saved['flag'] = False
+        final_path = None  # Zurücksetzen, da es sich um ein neues Dokument handelt
+        root.title("Grinder — Konfigurationseditor — Neues Template")
+        
+        # Direkt als neues Dokument speichern lassen
+        if messagebox.askyesno('Template erstellt', 'Neues Template wurde erstellt. Möchten Sie es jetzt speichern?'):
+            on_save_as()
+
     def on_save_as():
         nonlocal final_path
-        newp = filedialog.asksaveasfilename(title='Speichern unter', defaultextension='.json', filetypes=[('JSON', '*.json'), ('Alle Dateien', '*.*')])
+        # Bestimme initialdir aus final_path
+        initialdir = os.path.dirname(final_path) if final_path else None
+        initialfile = os.path.basename(final_path) if final_path else None
+        newp = filedialog.asksaveasfilename(title='Speichern unter', defaultextension='.json', filetypes=[('JSON', '*.json'), ('Alle Dateien', '*.*')], initialdir=initialdir, initialfile=initialfile)
         if newp:
             if do_save(newp):
                 final_path = newp
@@ -454,11 +594,12 @@ def edit_config_gui(path):
             return
 
         # Sicherheits-Checkliste (einfaches Modal)
+        s_schneiden = cfg.get('schleifscheibe_Schneiden', {})
         checklist = [
             (f"safe_z (Sicherheitsabstand) = {cfg.get('maschine', {}).get('safe_z')}", 'safe_z'),
             (f"start_x = {cfg.get('maschine', {}).get('start_x')}", 'start_x'),
-            (f"schleifscheibe.drehzahl = {cfg.get('schleifscheibe', {}).get('drehzahl')}", 'drehzahl'),
-            (f"schleifscheibe.schleifvorschub = {cfg.get('schleifscheibe', {}).get('schleifvorschub')}", 'schleifvorschub')
+            (f"schleifscheibe_Schneiden.drehzahl = {s_schneiden.get('drehzahl')}", 'drehzahl'),
+            (f"schleifscheibe_Schneiden.schleifvorschub = {s_schneiden.get('schleifvorschub')}", 'schleifvorschub')
         ]
         check_text = '\n'.join([c[0] for c in checklist])
         if not messagebox.askyesno('Sicherheits-Checkliste', f'Bitte überprüfen Sie vor dem Start die folgenden Werte:\n\n{check_text}\n\nIst alles in Ordnung?'):
@@ -474,7 +615,7 @@ def edit_config_gui(path):
 
         # Erzeuge G-Code mit aktuellem cfg
         try:
-            generiere_gcode(cfg)
+            generiere_gcode(cfg, os.path.basename(final_path) if final_path else None)
             out = cfg.get('ausgabe', {}).get('datei', '(keine ausgabe.datei gesetzt)')
             messagebox.showinfo('G-Code erzeugt', f'G-Code wurde erzeugt:\n{out}')
             saved['flag'] = True
@@ -493,32 +634,75 @@ def edit_config_gui(path):
                 except Exception as e:
                     messagebox.showerror('Fehler', f'Ordner konnte nicht geöffnet werden: {e}')
 
-            # Option: Upload
-            if messagebox.askyesno('Upload', 'Möchten Sie die erzeugte Datei auf einen Server hochladen?'):
-                servers = load_servers()
-                if not servers:
-                    if messagebox.askyesno('Keine Server', 'Keine Server konfiguriert. Möchten Sie welche anlegen?'):
-                        manage_servers_gui(root)
-                        servers = load_servers()
-                # Wähle Server
-                if servers:
-                    choices = [f"{s.get('name')} ({s.get('type')}@{s.get('host')})" for s in servers]
-                    import tkinter as tk
-                    from tkinter import simpledialog
-                    sel = simpledialog.askinteger('Server wählen', '\n'.join([f"{i+1}: {c}" for i, c in enumerate(choices)]) + '\n\nGeben Sie die Nummer ein:', parent=root, minvalue=1, maxvalue=len(choices))
-                    if sel is not None:
-                        target = servers[sel-1]
-                        try:
-                            if target.get('type') == 'ftp':
-                                upload_via_ftp(out, target)
-                            else:
-                                upload_via_sftp(out, target)
-                            messagebox.showinfo('Upload', 'Upload erfolgreich')
-                        except Exception as e:
-                            messagebox.showerror('Upload fehlgeschlagen', f'Fehler beim Upload: {e}')
-
         except Exception as e:
             messagebox.showerror('Fehler beim Generieren', f'Fehler beim Erzeugen des G-Codes: {e}')
+
+    def on_generate_front():
+        """Validiert aktuelle JSON, führt die Sicherheit-Checklist und erzeugt den Front G-Code."""
+        data = text.get('1.0', 'end-1c')
+        valid, err = validate_json_string(data)
+        if not valid:
+            if not messagebox.askyesno('Ungültiges JSON', f'JSON ist ungültig:\n{err}\nTrotzdem fortfahren?'):
+                return
+        # Versuche zu parsen
+        try:
+            cfg = json.loads(data)
+        except Exception as e:
+            messagebox.showerror('Fehler', f'Kann JSON nicht parsen: {e}')
+            return
+
+        # Validiere Front-Konfiguration
+        ok, errors = validate_front_config(cfg)
+        if not ok:
+            err_msg = '\n'.join(errors)
+            if not messagebox.askyesno('Front-Konfiguration fehlerhaft', f'Fehler in Front-Konfiguration:\n{err_msg}\n\nTrotzdem fortfahren?'):
+                return
+
+        # Sicherheits-Checkliste (einfaches Modal)
+        s_front = cfg.get('schleifscheibe_Front', {})
+        f = cfg.get('aktionen', {}).get('front', cfg.get('front', {}))
+        checklist = [
+            (f"z_sicher (Sicherheitshöhe) = {f.get('z_sicher')}", 'z_sicher'),
+            (f"x_start = {f.get('x_start')}", 'x_start'),
+            (f"x_end = {f.get('x_end')}", 'x_end'),
+            (f"front.feed = {f.get('feed')}", 'feed'),
+            (f"schleifscheibe_Front.drehzahl = {s_front.get('drehzahl')}", 'drehzahl')
+        ]
+        check_text = '\n'.join([c[0] for c in checklist])
+        if not messagebox.askyesno('Sicherheits-Checkliste Front', f'Bitte überprüfen Sie vor dem Start die folgenden Werte:\n\n{check_text}\n\nIst alles in Ordnung?'):
+            return
+
+        # Falls noch nicht gespeichert, frage nach Speichern
+        if not final_path or not os.path.exists(final_path) or not saved['flag']:
+            if messagebox.askyesno('Speichern', 'Konfiguration speichern bevor Front G-Code erzeugt wird?'):
+                if not do_save(final_path):
+                    # Falls save failed oder kein Pfad -> Save As
+                    if messagebox.askyesno('Speichern unter', 'Soll die Konfiguration unter einem neuen Namen gespeichert werden?'):
+                        on_save_as()
+
+        # Erzeuge Front G-Code mit aktuellem cfg
+        try:
+            generiere_front_gcode(cfg, os.path.basename(final_path) if final_path else None)
+            out = f.get('ausgabe_datei', cfg.get('ausgabe', {}).get('datei', 'fraeser_front.ngc'))
+            messagebox.showinfo('Front G-Code erzeugt', f'Front G-Code wurde erzeugt:\n{out}')
+            saved['flag'] = True
+            save_last_config_path(final_path)
+            update_status()
+
+            # Option: Ordner öffnen
+            if messagebox.askyesno('Öffnen?', 'Ordner mit der erzeugten Datei im Explorer öffnen?'):
+                try:
+                    folder = os.path.abspath(os.path.dirname(out))
+                    if os.name == 'nt':
+                        os.startfile(folder)
+                    else:
+                        import subprocess
+                        subprocess.Popen(['xdg-open', folder])
+                except Exception as e:
+                    messagebox.showerror('Fehler', f'Ordner konnte nicht geöffnet werden: {e}')
+
+        except Exception as e:
+            messagebox.showerror('Fehler beim Generieren', f'Fehler beim Erzeugen des Front G-Codes: {e}')
 
     def on_insert_front():
         data = text.get('1.0', 'end-1c')
@@ -599,32 +783,159 @@ def edit_config_gui(path):
         close_btn2 = tk.Button(btnf, text='Schließen', command=pv.destroy)
         close_btn2.pack(side='right', padx=6, pady=6)
 
+    def on_upload_edge():
+        """Upload Edge G-Code to server"""
+        data = text.get('1.0', 'end-1c')
+        try:
+            cfg = json.loads(data)
+        except Exception as e:
+            messagebox.showerror('Fehler', f'Kann JSON nicht parsen: {e}')
+            return
+        
+        # Get output filename
+        if 'aktionen' in cfg and 'schneiden' in cfg['aktionen']:
+            out = cfg['aktionen']['schneiden'].get('ausgabe_datei', 'fraeser_kanten.ngc')
+        else:
+            out = cfg.get("ausgabe", {}).get("datei", "fraeser_schaerfen.ngc")
+        
+        if not os.path.exists(out):
+            messagebox.showerror('Fehler', f'Datei nicht gefunden: {out}\\nBitte zuerst G-Code generieren.')
+            return
+        
+        # Select server
+        servers = load_servers()
+        if not servers:
+            if messagebox.askyesno('Keine Server', 'Keine Server konfiguriert. Möchten Sie welche anlegen?'):
+                manage_servers_gui(root)
+                servers = load_servers()
+        
+        if servers:
+            choices = [f"{s.get('name')} ({s.get('type')}@{s.get('host')})" for s in servers]
+            import tkinter as tk
+            from tkinter import simpledialog
+            sel = simpledialog.askinteger('Server wählen', '\\n'.join([f"{i+1}: {c}" for i, c in enumerate(choices)]) + '\\n\\nGeben Sie die Nummer ein:', parent=root, minvalue=1, maxvalue=len(choices))
+            if sel is not None:
+                target = servers[sel-1]
+                try:
+                    if target.get('type') == 'ftp':
+                        upload_via_ftp(out, target)
+                    else:
+                        upload_via_sftp(out, target)
+                    messagebox.showinfo('Upload', 'Upload erfolgreich')
+                except Exception as e:
+                    messagebox.showerror('Upload fehlgeschlagen', f'Fehler beim Upload: {e}')
+
+    def on_upload_front():
+        """Upload Front G-Code to server"""
+        data = text.get('1.0', 'end-1c')
+        try:
+            cfg = json.loads(data)
+        except Exception as e:
+            messagebox.showerror('Fehler', f'Kann JSON nicht parsen: {e}')
+            return
+        
+        # Get output filename
+        f = cfg.get('aktionen', {}).get('front', cfg.get('front', {}))
+        out = f.get('ausgabe_datei', 'fraeser_front.ngc')
+        
+        if not os.path.exists(out):
+            messagebox.showerror('Fehler', f'Datei nicht gefunden: {out}\\nBitte zuerst G-Code generieren.')
+            return
+        
+        # Select server
+        servers = load_servers()
+        if not servers:
+            if messagebox.askyesno('Keine Server', 'Keine Server konfiguriert. Möchten Sie welche anlegen?'):
+                manage_servers_gui(root)
+                servers = load_servers()
+        
+        if servers:
+            choices = [f"{s.get('name')} ({s.get('type')}@{s.get('host')})" for s in servers]
+            import tkinter as tk
+            from tkinter import simpledialog
+            sel = simpledialog.askinteger('Server wählen', '\\n'.join([f"{i+1}: {c}" for i, c in enumerate(choices)]) + '\\n\\nGeben Sie die Nummer ein:', parent=root, minvalue=1, maxvalue=len(choices))
+            if sel is not None:
+                target = servers[sel-1]
+                try:
+                    if target.get('type') == 'ftp':
+                        upload_via_ftp(out, target)
+                    else:
+                        upload_via_sftp(out, target)
+                    messagebox.showinfo('Upload', 'Upload erfolgreich')
+                except Exception as e:
+                    messagebox.showerror('Upload fehlgeschlagen', f'Fehler beim Upload: {e}')
+
     root = tk.Tk()
     root.title(f"Grinder — Konfigurationseditor — {os.path.basename(path)}")
     root.geometry('900x600')
 
-    # Top frame: buttons
+    # Menüleiste erstellen
+    menubar = tk.Menu(root)
+    root.config(menu=menubar)
+
+    # Datei-Menü
+    file_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="Datei", menu=file_menu)
+    file_menu.add_command(label="Neues Template...", command=on_create_template, accelerator="Ctrl+N")
+    file_menu.add_separator()
+    file_menu.add_command(label="Öffnen...", command=on_open, accelerator="Ctrl+O")
+    file_menu.add_command(label="Speichern", command=on_save, accelerator="Ctrl+S")
+    file_menu.add_command(label="Speichern unter...", command=on_save_as, accelerator="Ctrl+Shift+S")
+    file_menu.add_separator()
+    file_menu.add_command(label="Schließen", command=on_close, accelerator="Ctrl+Q")
+
+    # Bearbeiten-Menü
+    edit_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="Bearbeiten", menu=edit_menu)
+    edit_menu.add_command(label="Formatieren", command=lambda: do_format_action(), accelerator="Ctrl+F")
+    edit_menu.add_separator()
+    edit_menu.add_command(label="Insert Front Template", command=on_insert_front)
+    edit_menu.add_command(label="Validate Front", command=on_validate_front)
+    edit_menu.add_command(label="Preview Front Passes", command=on_preview_front)
+
+    # G-Code-Menü
+    gcode_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="G-Code", menu=gcode_menu)
+    gcode_menu.add_command(label="Erzeugen (Edge)", command=on_generate, accelerator="F5")
+    gcode_menu.add_command(label="Erzeugen (Front)", command=on_generate_front, accelerator="F6")
+    gcode_menu.add_separator()
+    gcode_menu.add_command(label="Upload Edge", command=on_upload_edge)
+    gcode_menu.add_command(label="Upload Front", command=on_upload_front)
+
+    # Einstellungen-Menü
+    settings_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="Einstellungen", menu=settings_menu)
+    settings_menu.add_command(label="Server verwalten...", command=lambda: manage_servers_gui(root))
+
+    # Hilfe-Menü
+    help_menu = tk.Menu(menubar, tearoff=0)
+    menubar.add_cascade(label="Hilfe", menu=help_menu)
+    help_menu.add_command(label="Über Grinder", command=lambda: messagebox.showinfo("Über Grinder", "Grinder CNC G-Code Generator\n\nFür Fräser-Schärfoperationen\nVersion 1.0"))
+
+    # Keyboard shortcuts
+    root.bind('<Control-n>', lambda e: on_create_template())
+    root.bind('<Control-o>', lambda e: on_open())
+    root.bind('<Control-s>', lambda e: on_save())
+    root.bind('<Control-Shift-S>', lambda e: on_save_as())
+    root.bind('<Control-q>', lambda e: on_close())
+    root.bind('<Control-f>', lambda e: do_format_action())
+    root.bind('<F5>', lambda e: on_generate())
+    root.bind('<F6>', lambda e: on_generate_front())
+
+    # Toolbar (reduziert) - nur wichtigste Buttons
     btn_frame = tk.Frame(root)
     btn_frame.pack(fill='x')
 
-    open_btn = tk.Button(btn_frame, text='Öffnen...', command=on_open)
-    open_btn.pack(side='left', padx=4, pady=4)
-    gen_btn = tk.Button(btn_frame, text='G-Code erzeugen', command=on_generate)
+    gen_btn = tk.Button(btn_frame, text='G-Code (Edge)', command=on_generate)
     gen_btn.pack(side='left', padx=4, pady=4)
+    gen_front_btn = tk.Button(btn_frame, text='G-Code (Front)', command=on_generate_front)
+    gen_front_btn.pack(side='left', padx=4, pady=4)
+    upload_edge_btn = tk.Button(btn_frame, text='Upload Edge', command=on_upload_edge)
+    upload_edge_btn.pack(side='left', padx=4, pady=4)
+    upload_front_btn = tk.Button(btn_frame, text='Upload Front', command=on_upload_front)
+    upload_front_btn.pack(side='left', padx=4, pady=4)
     save_btn = tk.Button(btn_frame, text='Speichern', command=on_save)
     save_btn.pack(side='left', padx=4, pady=4)
-    saveas_btn = tk.Button(btn_frame, text='Speichern unter...', command=on_save_as)
-    saveas_btn.pack(side='left', padx=4, pady=4)
-    format_btn = tk.Button(btn_frame, text='Formatieren', command=lambda: do_format_action())
-    format_btn.pack(side='left', padx=4, pady=4)
-    insert_front_btn = tk.Button(btn_frame, text='Insert Front Template', command=on_insert_front)
-    insert_front_btn.pack(side='left', padx=4, pady=4)
-    validate_front_btn = tk.Button(btn_frame, text='Validate Front', command=on_validate_front)
-    validate_front_btn.pack(side='left', padx=4, pady=4)
-    preview_front_btn = tk.Button(btn_frame, text='Preview Front Passes', command=on_preview_front)
-    preview_front_btn.pack(side='left', padx=4, pady=4)
-    close_btn = tk.Button(btn_frame, text='Schließen', command=on_close)
-    close_btn.pack(side='right', padx=4, pady=4)
 
     # Main area: line numbers + text with scrollbars
     frame = tk.Frame(root)
@@ -856,11 +1167,77 @@ def upload_via_sftp(local_path, server):
     keypath = server.get('key_path')
     remote_dir = server.get('remote_path') or '.'
 
-    # First, try an SSH agent / key lookup via SSHClient (allow_agent=True, look_for_keys=True)
+    # Use SSHClient for better compatibility with banners and host key handling
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    
+    # Prepare connection kwargs
+    connect_kwargs = {
+        'hostname': host,
+        'port': port,
+        'username': user,
+        'timeout': 10,
+        'banner_timeout': 200,  # Longer timeout for banner
+        'auth_timeout': 30
+    }
+    
+    # Try key-based authentication first
+    if keypath:
+        passphrase = server.get('key_passphrase')
+        try:
+            import keyring
+        except Exception:
+            keyring = None
+        if (not passphrase) and keyring and server.get('use_keyring'):
+            passphrase = keyring.get_password('Grinder-key-'+server.get('name',''), user or '')
+        
+        # Try to load the key
+        key = None
+        last_exc = None
+        for key_class in [paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey]:
+            try:
+                key = key_class.from_private_key_file(keypath, password=passphrase)
+                break
+            except Exception as e:
+                last_exc = e
+        
+        # If key loading failed and no passphrase, prompt for one
+        if key is None and not passphrase:
+            try:
+                import tkinter as tk
+                from tkinter import simpledialog
+                root = tk.Tk()
+                root.withdraw()
+                p = simpledialog.askstring('Passphrase', f'Passphrase für Schlüssel {keypath}:', show='*')
+                root.destroy()
+                if p:
+                    for key_class in [paramiko.Ed25519Key, paramiko.RSAKey, paramiko.ECDSAKey]:
+                        try:
+                            key = key_class.from_private_key_file(keypath, password=p)
+                            if keyring and server.get('use_keyring'):
+                                try:
+                                    keyring.set_password('Grinder-key-'+server.get('name',''), user or '', p)
+                                except Exception:
+                                    pass
+                            break
+                        except Exception as e:
+                            last_exc = e
+            except Exception:
+                pass
+        
+        if key:
+            connect_kwargs['pkey'] = key
+        else:
+            raise RuntimeError(f'Unable to load private key {keypath}: {last_exc}')
+    elif pwd:
+        connect_kwargs['password'] = pwd
+    else:
+        # Try agent and look for keys
+        connect_kwargs['allow_agent'] = True
+        connect_kwargs['look_for_keys'] = True
+    
     try:
-        client.connect(host, port=port, username=user, allow_agent=True, look_for_keys=True, timeout=10)
+        client.connect(**connect_kwargs)
         sftp = client.open_sftp()
         try:
             try:
@@ -872,80 +1249,12 @@ def upload_via_sftp(local_path, server):
                 except Exception:
                     sftp.chdir('.')
             sftp.put(local_path, os.path.basename(local_path))
-            return
         finally:
             sftp.close()
-    except Exception:
-        # Agent/Key-based connect failed; proceed to explicit keypath / password
-        pass
-
-    # Try explicit private key file (with passphrase from server entry or keyring, prompt if necessary)
-    passphrase = server.get('key_passphrase')
-    try:
-        import keyring
-    except Exception:
-        keyring = None
-    if (not passphrase) and keyring and server.get('use_keyring'):
-        passphrase = keyring.get_password('Grinder-key-'+server.get('name',''), server.get('username') or '')
-
-    t = paramiko.Transport((host, port))
-    if keypath:
-        key = None
-        last_exc = None
-        try:
-            key = paramiko.Ed25519Key.from_private_key_file(keypath, password=passphrase)
-        except Exception as e:
-            last_exc = e
-        if key is None:
-            try:
-                key = paramiko.RSAKey.from_private_key_file(keypath, password=passphrase)
-            except Exception as e:
-                last_exc = e
-        if key is None:
-            # If interactive prompt possible, ask for passphrase
-            try:
-                import tkinter as tk
-                from tkinter import simpledialog
-                root = tk.Tk()
-                root.withdraw()
-                p = simpledialog.askstring('Passphrase', f'Passphrase für Schlüssel {keypath}:', show='*')
-                root.destroy()
-            except Exception:
-                p = None
-            if p:
-                try:
-                    key = paramiko.Ed25519Key.from_private_key_file(keypath, password=p)
-                except Exception:
-                    try:
-                        key = paramiko.RSAKey.from_private_key_file(keypath, password=p)
-                    except Exception:
-                        key = None
-                if p and server.get('use_keyring') and keyring:
-                    try:
-                        keyring.set_password('Grinder-key-'+server.get('name',''), server.get('username') or '', p)
-                    except Exception:
-                        pass
-        if key is None:
-            raise RuntimeError(f'Unable to load private key {keypath}: {last_exc}')
-        t.connect(username=user, pkey=key)
-    else:
-        t.connect(username=user, password=pwd)
-
-    sftp = paramiko.SFTPClient.from_transport(t)
-    try:
-        try:
-            sftp.chdir(remote_dir)
-        except IOError:
-            # try to create
-            try:
-                sftp.mkdir(remote_dir)
-                sftp.chdir(remote_dir)
-            except Exception:
-                sftp.chdir('.')
-        sftp.put(local_path, os.path.basename(local_path))
-    finally:
-        sftp.close()
-        t.close()
+            client.close()
+    except Exception as e:
+        client.close()
+        raise RuntimeError(f'SFTP Upload fehlgeschlagen: {e}')
 
 
 def manage_servers_gui(parent):
@@ -1175,46 +1484,46 @@ def manage_servers_gui(parent):
 # --- Ende GUI / state helpers -------------------------------------------
 
 
-def gcode_header(cfg):
+def gcode_header(cfg, config_file=None):
+    from datetime import datetime
     m = cfg["maschine"]
-    s = cfg["schleifscheibe"]
+    # Support new structure: schleifscheibe_Schneiden or old structure: schleifscheibe
+    s = cfg.get("schleifscheibe_Schneiden", cfg.get("schleifscheibe", {}))
 
     lines = []
     lines.append("(Fräser Schärfen – automatisch generiert)")
+    lines.append(f"(Erstellt: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')})")
+    if config_file:
+        lines.append(f"(Vorlage: {config_file})")
     lines.append("G21   (mm)")
     lines.append("G90   (absolute Positionierung)")
     lines.append("G17   (XY-Ebene)")
     lines.append(f"G0 Z{m['safe_z']:.3f}")
 
-    # Werkzeugwechsel (optional, z.B. T1 M6)
-    w = cfg.get("werkzeug", {})
-    tool_no = w.get("tool_number")
+    # Werkzeugwechsel (optional, z.B. T1 M6) - use schleifscheibe_Schneiden if available
+    tool_no = s.get("tool_number")
     if tool_no is not None:
         try:
             tool_no_int = int(tool_no)
-            lines.append(f"T{tool_no_int} M6   (Werkzeugwechsel)")
+            lines.append(f"T{tool_no_int} M6   (Werkzeugwechsel Edge)")
         except Exception:
             lines.append(f"(Ungültige tool_number: {tool_no})")
 
-    # Spindelstart hier nur, wenn nicht auf ersten Pass verschoben
-    if not s.get('spindle_on_first_pass', True):
-        try:
-            dreh = int(s.get('drehzahl'))
-            dwell = int(s.get('spindle_dwell_ms', 1000))
-            lines.append(f"M3 S{dreh}   (Spindel ein)")
-            lines.append(f"G4 P{dwell/1000.0}")
-        except Exception:
-            # kein gültiger Spindelwert gegeben
-            pass
-
-    lines.append(f"G0 X{m['start_x']:.3f} Y{m['start_y']:.3f} A{m['a_start']:.3f}")
-
+    # Spindel starten
+    lines.append(f"S{s.get('drehzahl', 3000)} M3   (Spindel EIN, Schleifscheibe)")
+    
     # Werkstück-Nullpunkt (optional, z.B. G54)
     nullpunkt = m.get("nullpunkt")
     if nullpunkt:
         code = nullpunkt.get("code", "G54")
         lines.append(f"{code}   (Werkstücknullpunkt)")
-        # optional: schnelle Verfahrbewegung zum Nullpunkt, nur vorhandene Achsen verwenden
+    
+    # Position anfahren nach Nullpunkt
+    lines.append(f"G0 X{m['start_x']:.3f} Y{m['start_y']:.3f} A{m['a_start']:.3f}")
+    lines.append("")
+    
+    # optional: schnelle Verfahrbewegung zum Nullpunkt, falls definiert
+    if nullpunkt:
         pos_parts = []
         if "x" in nullpunkt:
             pos_parts.append(f"X{nullpunkt['x']:.3f}")
@@ -1226,9 +1535,8 @@ def gcode_header(cfg):
             pos_parts.append(f"A{nullpunkt['a']:.3f}")
         if pos_parts:
             lines.append("G0 " + " ".join(pos_parts))
+            lines.append("")
 
-    lines.append(f"S{s['drehzahl']} M3   (Spindel EIN, Schleifscheibe)")
-    lines.append("")
     return lines
 
 
@@ -1268,16 +1576,25 @@ def berechne_x_aus_drall(a_winkel_grad, werkzeug):
 
 def gcode_schleifpass(cfg, pass_num, z_tiefe):
     m = cfg["maschine"]
-    s = cfg["schleifscheibe"]
-    w = cfg["werkzeug"]
+    # Support new structure: schleifscheibe_Schneiden or old structure: schleifscheibe
+    s = cfg.get("schleifscheibe_Schneiden", cfg.get("schleifscheibe", {}))
+    # Support new structure: fraeser or old structure: werkzeug_edge/werkzeug
+    if 'fraeser' in cfg:
+        w = cfg['fraeser']
+    else:
+        w = cfg.get("werkzeug_edge", cfg.get("werkzeug", {}))
+    
+    # Get ruecken parameters from aktionen.schneiden (new structure) or werkzeug (old structure)
+    aktion_schneiden = cfg.get('aktionen', {}).get('schneiden', {})
 
     a_start = m["a_start"]
     a_end = m["a_end"]
     a_steps = m["a_steps"]
+    z_arbeit = z_von_oberer_tangente(cfg, z_tiefe)
 
     lines = []
-    lines.append(f"(Schleifdurchgang {pass_num}, Z={z_tiefe:.3f})")
-    lines.append(f"G1 Z{z_tiefe:.3f} F{s['schleifvorschub']:.3f}")
+    lines.append(f"(Schleifdurchgang {pass_num}, Z={z_arbeit:.3f}, Top-Rel={z_tiefe:.3f})")
+    lines.append(f"G1 Z{z_arbeit:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
 
     # Für jede Schneide separat schleifen
     for schneide in range(w["schneidenanzahl"]):
@@ -1305,15 +1622,15 @@ def gcode_schleifpass(cfg, pass_num, z_tiefe):
                 a_start_pos = start_angle
                 x_end = m["start_x"] + length
                 a_end_pos = start_angle + degrees_total
-                lines.append(f"G1 X{x_start:.3f} A{a_start_pos:.3f} F{s['schleifvorschub']:.3f}")
-                lines.append(f"G1 X{x_end:.3f} A{a_end_pos:.3f} F{s['schleifvorschub']:.3f}")
+                lines.append(f"G1 X{x_start:.3f} A{a_start_pos:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
+                lines.append(f"G1 X{x_end:.3f} A{a_end_pos:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
             else:
                 steps = int(w.get("schneiden_schritte", a_steps))
                 for i in range(steps + 1):
                     frac = i / steps
                     x = m["start_x"] + frac * length
                     a_pos = start_angle + frac * degrees_total
-                    lines.append(f"G1 X{x:.3f} A{a_pos:.3f} F{s['schleifvorschub']:.3f}")
+                    lines.append(f"G1 X{x:.3f} A{a_pos:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
 
             # Optional: Schneiderrücken nachschleifen genau nach deinen Schritten
             # Schrittfolge pro Schneide:
@@ -1323,19 +1640,20 @@ def gcode_schleifpass(cfg, pass_num, z_tiefe):
             #    b) G1 Z=pass_depth - p*ruecken_tiefe_delta
             #    c) G1 X = start_x + length  A = start_angle + drall_total + p*angle_step
             #    d) G0 Z = pass_depth + lift_after_pass (Sicherheitsabstand)
-            ruecken_grad = w.get("ruecken_grad", 0.0)
+            # Read ruecken parameters from aktionen.schneiden (new) or werkzeug (old)
+            ruecken_grad = aktion_schneiden.get("ruecken_grad", w.get("ruecken_grad", 0.0))
             if ruecken_grad and ruecken_grad > 0 and "schneidenlaenge" in w and w["schneidenlaenge"] > 0:
                 # Schritt 1 (neu): Nach dem Hauptpass Z anheben auf Sicherheitsabstand
-                lift_initial = s.get("lift_after_pass", 1.0)
-                z_lift_initial = z_tiefe + lift_initial
+                lift_initial = s.get("rueckzug_hoehe_Z", 2.0)
+                z_lift_initial = z_arbeit + lift_initial
                 if z_lift_initial > m["safe_z"]:
                     z_lift_initial = m["safe_z"]
                 lines.append(f"G0 Z{z_lift_initial:.3f}")
 
-                ruecken_delta = w.get("ruecken_tiefe_delta", 0.2)  # Tiefe pro Rückenstufe
+                ruecken_delta = aktion_schneiden.get("ruecken_tiefe_delta", w.get("ruecken_tiefe_delta", 0.2))  # Tiefe pro Rückenstufe
                 length = w["schneidenlaenge"]
 
-                steps_r = int(w.get("ruecken_schritte", max(1, int(w.get("schneiden_schritte", a_steps)))))
+                steps_r = int(aktion_schneiden.get("ruecken_schritte", w.get("ruecken_schritte", max(1, int(w.get("schneiden_schritte", a_steps))))))
                 # Gesamtdrehung (Drall) der Hauptbewegung über die Länge
                 if "drall_grad_pro_mm" in w:
                     drall_total = w["drall_grad_pro_mm"] * length
@@ -1345,36 +1663,39 @@ def gcode_schleifpass(cfg, pass_num, z_tiefe):
                         raise ValueError("Kein Drall angegeben (drall_grad_pro_mm oder drall_steigung fehlt)")
                     drall_total = (360.0 / mm_per_360) * length
 
+                # erster_ruecken_grad ist der Startwinkel für den Rücken (Offset zur Schneide)
+                erster_ruecken_grad = aktion_schneiden.get("erster_ruecken_grad", w.get("erster_ruecken_grad", 0.0))
                 angle_step = ruecken_grad / steps_r
 
                 for p in range(1, steps_r + 1):
                     # Z für diesen Rücken-Durchgang (stufenweise tiefer)
-                    z_ruecken_pass = z_tiefe - p * ruecken_delta
-                    if z_ruecken_pass < s["max_tiefe"]:
-                        z_ruecken_pass = s["max_tiefe"]
+                    z_ruecken_top_rel = z_tiefe - p * ruecken_delta
+                    z_ruecken_pass = z_von_oberer_tangente(cfg, z_ruecken_top_rel)
 
-                    start_a = start_angle + p * angle_step
-                    end_a = start_angle + drall_total + p * angle_step
+                    # Start-Winkel: Schneide + erster_ruecken_grad + inkrementelle Schritte
+                    # (p-1) weil der erste Pass (p=1) genau bei erster_ruecken_grad starten soll
+                    start_a = start_angle + erster_ruecken_grad + (p - 1) * angle_step
+                    end_a = start_angle + erster_ruecken_grad + drall_total + (p - 1) * angle_step
 
                     # Schritt 3: Zurück nach X=start, A=start_a (auf Sicherheits-Höhe bereits)
                     lines.append(f"G0 X{m['start_x']:.3f} A{start_a:.3f}")
                     # Schritt 4: Senken auf Z_ruecken_pass
-                    lines.append(f"G1 Z{z_ruecken_pass:.3f} F{s['schleifvorschub']:.3f}")
+                    lines.append(f"G1 Z{z_ruecken_pass:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
                     # Schritt 5: Schleifen von X=start -> X=start+length mit A von start_a -> end_a
-                    lines.append(f"G1 X{(m['start_x'] + length):.3f} A{end_a:.3f} F{s['schleifvorschub']:.3f}")
+                    lines.append(f"G1 X{(m['start_x'] + length):.3f} A{end_a:.3f} F{s.get('schleifvorschub', 200.0):.3f}")
                     # Schritt 6: Z heben auf Sicherheitsabstand
-                    lift = s.get("lift_after_pass", 1.0)
+                    lift = s.get("rueckzug_hoehe_Z", 2.0)
                     z_lift_pos = z_ruecken_pass + lift
                     if z_lift_pos > m["safe_z"]:
                         z_lift_pos = m["safe_z"]
                     lines.append(f"G0 Z{z_lift_pos:.3f}")
 
                 # Am Ende der Rückenserie: zurück auf Pass-Tiefe (für Konsistenz)
-                lines.append(f"G0 Z{z_tiefe:.3f}")
+                lines.append(f"G0 Z{z_arbeit:.3f}")
 
             # Nach dem Schliff: Z um Sicherheitsabstand anheben, dann zurück zum Start-X und A der nächsten Schneide
-            lift = s.get("lift_after_pass", 1.0)
-            z_lift_pos = z_tiefe + lift
+            lift = s.get("rueckzug_hoehe_Z", 2.0)
+            z_lift_pos = z_arbeit + lift
             if z_lift_pos > m["safe_z"]:
                 z_lift_pos = m["safe_z"]
             lines.append(f"G0 Z{z_lift_pos:.3f}")
@@ -1390,7 +1711,7 @@ def gcode_schleifpass(cfg, pass_num, z_tiefe):
                 a_gesamt = a + offset
                 x = m["start_x"] + berechne_x_aus_drall(a, w)
                 lines.append(
-                    f"G1 A{a_gesamt:.3f} X{x:.3f} F{s['schleifvorschub']:.3f}"
+                    f"G1 A{a_gesamt:.3f} X{x:.3f} F{s.get('schleifvorschub', 200.0):.3f}"
                 )
 
             # Zurück zum Startwinkel dieser Schneide
@@ -1403,30 +1724,47 @@ def gcode_schleifpass(cfg, pass_num, z_tiefe):
     return lines
 
 
-def generiere_gcode(cfg):
-    s = cfg["schleifscheibe"]
-    ausgabe_datei = cfg["ausgabe"]["datei"]
+def generiere_gcode(cfg, config_file=None):
+    # Support new structure: schleifscheibe_Schneiden or old structure: schleifscheibe
+    s = cfg.get("schleifscheibe_Schneiden", cfg.get("schleifscheibe", {}))
+    # Support new structure: aktionen.schneiden or old structure: ausgabe
+    if 'aktionen' in cfg and 'schneiden' in cfg['aktionen']:
+        ausgabe_datei = cfg['aktionen']['schneiden'].get('ausgabe_datei', 'fraeser_kanten.ngc')
+    else:
+        ausgabe_datei = cfg.get("ausgabe", {}).get("datei", "fraeser_schaerfen.ngc")
 
     lines = []
-    lines += gcode_header(cfg)
-
-    # Spindelstart beim ersten Pass (falls konfiguriert)
-    if s.get('drehzahl') and s.get('spindle_on_first_pass', True):
-        try:
-            dreh = int(s.get('drehzahl'))
-            dwell = int(s.get('spindle_dwell_ms', 1000))
-            lines.append(f"M3 S{dreh}   (Spindel ein)")
-            lines.append(f"G4 P{dwell/1000.0}")
-        except Exception:
-            pass
+    lines += gcode_header(cfg, config_file)
 
     aktuelle_tiefe = 0.0
-    for p in range(1, s["anzahl_passe"] + 1):
-        aktuelle_tiefe -= s["zustellung_pro_pass"]
-        if aktuelle_tiefe < s["max_tiefe"]:
-            aktuelle_tiefe = s["max_tiefe"]
+    # Support new structure: aktionen.schneiden or old structure: schleifscheibe
+    if 'aktionen' in cfg and 'schneiden' in cfg['aktionen']:
+        aktion = cfg['aktionen']['schneiden']
+        zustellung = aktion.get('zustellung_pro_pass', 0.05)
+        
+        # Berechne anzahl_passe und max_tiefe aus durchmesser und durchmesser_geschaerft
+        if 'durchmesser_geschaerft' in aktion and 'fraeser' in cfg:
+            fraeser_durchmesser = cfg['fraeser'].get('durchmesser', 12.0)
+            durchmesser_geschaerft = aktion['durchmesser_geschaerft']
+            material_abzutragen = abs(fraeser_durchmesser - durchmesser_geschaerft)
+            # max_tiefe = -(durchmesser - durchmesser_geschaerft) / 2
+            max_tiefe = -material_abzutragen / 2.0
+            # anzahl_passe = (durchmesser - durchmesser_geschaerft) / zustellung_pro_pass / 2
+            anzahl_passe = max(1, int(material_abzutragen / zustellung / 2))
+        else:
+            anzahl_passe = int(aktion.get('anzahl_passe', 20))
+            max_tiefe = aktion.get('max_tiefe', -1.0)
+    else:
+        anzahl_passe = s.get("anzahl_passe", 20)
+        zustellung = s.get("zustellung_pro_pass", 0.05)
+        max_tiefe = s.get("max_tiefe", -1.0)
+        
+    for p in range(1, anzahl_passe + 1):
+        aktuelle_tiefe -= zustellung
+        if aktuelle_tiefe < max_tiefe:
+            aktuelle_tiefe = max_tiefe
         lines += gcode_schleifpass(cfg, p, aktuelle_tiefe)
-        if aktuelle_tiefe <= s["max_tiefe"]:
+        if aktuelle_tiefe <= max_tiefe:
             break
 
     lines += gcode_footer(cfg)
@@ -1534,7 +1872,7 @@ if __name__ == "__main__":
     
     if mode == 'edge' or mode == 'both':
         try:
-            generiere_gcode(cfg)
+            generiere_gcode(cfg, os.path.basename(config_datei))
         except Exception as e:
             print(f'Fehler bei Edge G-Code Generierung: {e}', file=sys.stderr)
             if mode == 'edge':
@@ -1551,7 +1889,7 @@ if __name__ == "__main__":
                 sys.exit(1)
         else:
             try:
-                generiere_front_gcode(cfg)
+                generiere_front_gcode(cfg, os.path.basename(config_datei))
             except Exception as e:
                 print(f'Fehler bei Front G-Code Generierung: {e}', file=sys.stderr)
                 if mode == 'front':

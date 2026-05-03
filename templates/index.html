@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Grinder CNC</title>
+    <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <h1>Grinder CNC</h1>
+            <p>G-Code Generator fuer 4-Achs Werkzeugschleifen (XYZA) · Z0 = Werkzeug-Drehmittelpunkt</p>
+        </div>
+        <div class="status" id="status">Bereit</div>
+    </header>
+
+    <main class="layout">
+        <section class="panel controls">
+            <div class="field">
+                <label for="templateSelect">Vorlage</label>
+                <select id="templateSelect">
+                    {% for tpl in templates %}
+                    <option value="{{ tpl.name }}">{{ tpl.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="field">
+                <label>Modus</label>
+                <div class="segmented" role="group" aria-label="Modus">
+                    <input type="radio" id="modeBoth" name="mode" value="both" checked>
+                    <label for="modeBoth">Edge + Front</label>
+                    <input type="radio" id="modeEdge" name="mode" value="edge">
+                    <label for="modeEdge">Edge</label>
+                    <input type="radio" id="modeFront" name="mode" value="front">
+                    <label for="modeFront">Front</label>
+                </div>
+            </div>
+
+            <div class="quick-grid">
+                <label>Fraeser D
+                    <input id="toolDiameter" type="number" step="0.01">
+                </label>
+                <label>Schneiden
+                    <input id="flutes" type="number" step="1">
+                </label>
+                <label>Ziel D
+                    <input id="targetDiameter" type="number" step="0.01">
+                </label>
+                <label>Front X Ende
+                    <input id="frontXEnd" type="number" step="0.01">
+                </label>
+            </div>
+
+            <div class="actions">
+                <button id="applyQuick" type="button">Werte uebernehmen</button>
+                <button id="generate" type="button" class="primary">G-Code erzeugen</button>
+            </div>
+
+            <div class="output-list" id="outputs"></div>
+        </section>
+
+        <section class="panel editor-panel">
+            <div class="panel-title">
+                <span>Konfiguration JSON</span>
+                <button id="formatJson" type="button">Formatieren</button>
+            </div>
+            <textarea id="configEditor" spellcheck="false">{{ initial_config }}</textarea>
+        </section>
+
+        <section class="panel preview-panel">
+            <div class="panel-title">
+                <span>G-Code Vorschau</span>
+                <span id="previewName"></span>
+            </div>
+            <pre id="preview">(Noch kein G-Code erzeugt)</pre>
+        </section>
+    </main>
+
+    <script>
+        window.initialConfig = {{ initial_config|safe }};
+    </script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
