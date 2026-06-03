@@ -3,6 +3,19 @@ const statusEl = document.getElementById("status");
 const outputsEl = document.getElementById("outputs");
 const previewEl = document.getElementById("preview");
 const previewNameEl = document.getElementById("previewName");
+const readoutToolEl = document.getElementById("readoutTool");
+const readoutFlutesEl = document.getElementById("readoutFlutes");
+const readoutTargetEl = document.getElementById("readoutTarget");
+const limitMappings = [
+    ["limitXMin", "x_min"],
+    ["limitXMax", "x_max"],
+    ["limitYMin", "y_min"],
+    ["limitYMax", "y_max"],
+    ["limitZMin", "z_min"],
+    ["limitZMax", "z_max"],
+    ["limitAMin", "a_min"],
+    ["limitAMax", "a_max"],
+];
 
 function setStatus(text) {
     statusEl.textContent = text;
@@ -18,10 +31,21 @@ function writeConfig(cfg) {
 }
 
 function fillQuickFields(cfg) {
-    document.getElementById("toolDiameter").value = cfg?.fraeser?.durchmesser ?? "";
-    document.getElementById("flutes").value = cfg?.fraeser?.schneidenanzahl ?? "";
-    document.getElementById("targetDiameter").value = cfg?.aktionen?.schneiden?.durchmesser_geschaerft ?? "";
+    const diameter = cfg?.fraeser?.durchmesser ?? "";
+    const flutes = cfg?.fraeser?.schneidenanzahl ?? "";
+    const target = cfg?.aktionen?.schneiden?.durchmesser_geschaerft ?? "";
+
+    document.getElementById("toolDiameter").value = diameter;
+    document.getElementById("flutes").value = flutes;
+    document.getElementById("targetDiameter").value = target;
     document.getElementById("frontXEnd").value = cfg?.aktionen?.front?.x_end ?? "";
+    for (const [id, key] of limitMappings) {
+        document.getElementById(id).value = cfg?.maschine?.limits?.[key] ?? "";
+    }
+
+    readoutToolEl.textContent = diameter === "" ? "-" : `${formatNumber(diameter)} mm`;
+    readoutFlutesEl.textContent = flutes === "" ? "-" : `${flutes}`;
+    readoutTargetEl.textContent = target === "" ? "-" : `${formatNumber(target)} mm`;
 }
 
 function applyQuickFields() {
@@ -30,6 +54,8 @@ function applyQuickFields() {
     cfg.aktionen = cfg.aktionen || {};
     cfg.aktionen.schneiden = cfg.aktionen.schneiden || {};
     cfg.aktionen.front = cfg.aktionen.front || {};
+    cfg.maschine = cfg.maschine || {};
+    cfg.maschine.limits = cfg.maschine.limits || {};
 
     const mappings = [
         ["toolDiameter", cfg.fraeser, "durchmesser"],
@@ -40,6 +66,17 @@ function applyQuickFields() {
     for (const [id, target, key] of mappings) {
         const value = document.getElementById(id).value;
         if (value !== "") target[key] = Number(value);
+    }
+    for (const [id, key] of limitMappings) {
+        const value = document.getElementById(id).value;
+        if (value === "") {
+            delete cfg.maschine.limits[key];
+        } else {
+            cfg.maschine.limits[key] = Number(value);
+        }
+    }
+    if (!Object.keys(cfg.maschine.limits).length) {
+        delete cfg.maschine.limits;
     }
     writeConfig(cfg);
 }
@@ -64,8 +101,9 @@ async function generate() {
     let cfg;
     try {
         cfg = readConfig();
+        fillQuickFields(cfg);
     } catch (error) {
-        showErrors(["JSON ist ungueltig: " + error.message]);
+        showErrors(["JSON ist ungültig: " + error.message]);
         setStatus("Fehler");
         return;
     }
@@ -128,9 +166,9 @@ document.getElementById("templateSelect").addEventListener("change", event => {
 document.getElementById("applyQuick").addEventListener("click", () => {
     try {
         applyQuickFields();
-        setStatus("Uebernommen");
+        setStatus("Übernommen");
     } catch (error) {
-        showErrors(["JSON ist ungueltig: " + error.message]);
+        showErrors(["JSON ist ungültig: " + error.message]);
         setStatus("Fehler");
     }
 });
@@ -140,7 +178,7 @@ document.getElementById("formatJson").addEventListener("click", () => {
         writeConfig(readConfig());
         setStatus("Formatiert");
     } catch (error) {
-        showErrors(["JSON ist ungueltig: " + error.message]);
+        showErrors(["JSON ist ungültig: " + error.message]);
         setStatus("Fehler");
     }
 });
@@ -151,5 +189,28 @@ document.getElementById("generate").addEventListener("click", () => {
         setStatus("Fehler");
     });
 });
+
+document.getElementById("generateTop").addEventListener("click", () => {
+    document.getElementById("generate").click();
+});
+
+editor.addEventListener("input", () => {
+    try {
+        fillQuickFields(readConfig());
+    } catch {
+        readoutToolEl.textContent = "-";
+        readoutFlutesEl.textContent = "-";
+        readoutTargetEl.textContent = "-";
+        for (const [id] of limitMappings) {
+            document.getElementById(id).value = "";
+        }
+    }
+});
+
+function formatNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return value;
+    return number.toLocaleString("de-DE", {maximumFractionDigits: 2});
+}
 
 fillQuickFields(window.initialConfig);

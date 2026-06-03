@@ -13,16 +13,6 @@
             "y": 0.0,
             "z": 0.0,
             "a": 0.0
-        },
-        "limits": {
-            "x_min": -5.0,
-            "x_max": 120.0,
-            "y_min": -40.0,
-            "y_max": 40.0,
-            "z_min": -5.0,
-            "z_max": 80.0,
-            "a_min": -360.0,
-            "a_max": 720.0
         }
     },
     "schleifscheibe_Schneiden": {
@@ -36,8 +26,7 @@
         "durchmesser": 80.0,
         "drehzahl": 3500,
         "tool_number": 2,
-        "schleifvorschub": 200.0,
-        "rueckzug_hoehe_Z": 2.0
+        "schleifvorschub": 200.0
     },
     "fraeser": {
         "durchmesser": 12.0,
@@ -68,29 +57,6 @@
             "spindle_on_first_pass": true,
             "spindle_dwell_ms": 1000,
             "cutting_angle": 3.0
-        },
-        "vermessen": {
-            "steuerung": "linuxcnc",
-            "tastkugel_durchmesser": 3.0,
-            "probe_feed": 50.0,
-            "rapid_feed": 800.0,
-            "safe_z": 20.0,
-            "retract": 2.0,
-            "front_x_probe_target": -5.0,
-            "diameter_z_probe_target": -2.0,
-            "ausgabe_datei": "fraeser_vermessen.ngc",
-            "drall_messpunkte": [
-                {
-                    "x": 0.0,
-                    "z_sicher": 20.0,
-                    "z_probe_target": -2.0
-                },
-                {
-                    "x": 10.0,
-                    "z_sicher": 20.0,
-                    "z_probe_target": -2.0
-                }
-            ]
         }
     }
 }

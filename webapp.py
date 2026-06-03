@@ -7,7 +7,14 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
-from Grinder import generiere_front_gcode, generiere_gcode, validate_front_config
+from Grinder import (
+    generiere_front_gcode,
+    generiere_gcode,
+    generiere_linuxcnc_vermess_gcode,
+    validate_front_config,
+    validate_machine_limits_config,
+    validate_probe_config,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -39,7 +46,7 @@ def create_app():
     def api_generate():
         payload = request.get_json(silent=True) or {}
         mode = payload.get("mode", "both")
-        if mode not in {"edge", "front", "both"}:
+        if mode not in {"edge", "front", "both", "measure"}:
             return jsonify({"ok": False, "errors": ["Ungueltiger Modus."]}), 400
 
         try:
@@ -69,6 +76,9 @@ def create_app():
                 if mode in {"front", "both"}:
                     generiere_front_gcode(cfg, "web-config.json")
                     created.append(output_name(cfg, "front"))
+                if mode == "measure":
+                    generiere_linuxcnc_vermess_gcode(cfg, "web-config.json")
+                    created.append(output_name(cfg, "measure"))
 
             files = []
             for name in created:
@@ -125,6 +135,8 @@ def load_template(name):
 
 def validate_config(cfg, mode):
     errors = []
+    errors.extend(validate_machine_limits_config(cfg))
+    errors.extend(validate_probe_config(cfg))
     if mode in {"edge", "both"}:
         for key in ("maschine", "fraeser"):
             if key not in cfg:
@@ -155,10 +167,14 @@ def prepare_output_names(cfg):
     front["ausgabe_datei"] = Path(front.get("ausgabe_datei") or "fraeser_front.ngc").name
     if edge["ausgabe_datei"] == front["ausgabe_datei"]:
         front["ausgabe_datei"] = f"front_{front['ausgabe_datei']}"
+    measure = actions.setdefault("vermessen", {})
+    measure["ausgabe_datei"] = Path(measure.get("ausgabe_datei") or "fraeser_vermessen.ngc").name
     return cfg
 
 
 def output_name(cfg, mode):
+    if mode == "measure":
+        return cfg.get("aktionen", {}).get("vermessen", {}).get("ausgabe_datei", "fraeser_vermessen.ngc")
     if mode == "front":
         return cfg.get("aktionen", {}).get("front", {}).get("ausgabe_datei", "fraeser_front.ngc")
     return cfg.get("aktionen", {}).get("schneiden", {}).get("ausgabe_datei", "fraeser_kanten.ngc")

@@ -13,16 +13,6 @@
             "y": 0.0,
             "z": 0.0,
             "a": 0.0
-        },
-        "limits": {
-            "x_min": -5.0,
-            "x_max": 120.0,
-            "y_min": -40.0,
-            "y_max": 40.0,
-            "z_min": -5.0,
-            "z_max": 80.0,
-            "a_min": -360.0,
-            "a_max": 720.0
         }
     },
     "schleifscheibe_Schneiden": {
@@ -40,21 +30,21 @@
         "rueckzug_hoehe_Z": 2.0
     },
     "fraeser": {
-        "durchmesser": 12.0,
+        "durchmesser": 8.0,
         "schneidenanzahl": 4,
         "drall_grad_pro_mm": 2.0,
         "schneidenlaenge": 10.0
     },
     "aktionen": {
         "schneiden": {
-            "durchmesser_geschaerft": 11.5,
+            "durchmesser_geschaerft": 7.5,
             "zustellung_pro_pass": 0.05,
             "erster_ruecken_grad": 20.0,
             "ruecken_grad": 220.0,
             "ruecken_tiefe_delta": 0.02,
             "ruecken_schritte": 10,
             "feed": 200.0,
-            "ausgabe_datei": "fraeser_kanten.ngc"
+            "ausgabe_datei": "fraeser_kantenEM8Z4HSS.ngc"
         },
         "front": {
             "zustellung_pro_pass": 0.01,
@@ -63,34 +53,11 @@
             "x_end": 3.0,
             "z_sicher": 5.0,
             "feed": 200.0,
-            "ausgabe_datei": "fraeser_front.ngc",
+            "ausgabe_datei": "fraeser_frontEM8Z4HSS.ngc",
             "retract_x": 1.0,
             "spindle_on_first_pass": true,
             "spindle_dwell_ms": 1000,
             "cutting_angle": 3.0
-        },
-        "vermessen": {
-            "steuerung": "linuxcnc",
-            "tastkugel_durchmesser": 3.0,
-            "probe_feed": 50.0,
-            "rapid_feed": 800.0,
-            "safe_z": 20.0,
-            "retract": 2.0,
-            "front_x_probe_target": -5.0,
-            "diameter_z_probe_target": -2.0,
-            "ausgabe_datei": "fraeser_vermessen.ngc",
-            "drall_messpunkte": [
-                {
-                    "x": 0.0,
-                    "z_sicher": 20.0,
-                    "z_probe_target": -2.0
-                },
-                {
-                    "x": 10.0,
-                    "z_sicher": 20.0,
-                    "z_probe_target": -2.0
-                }
-            ]
         }
     }
 }

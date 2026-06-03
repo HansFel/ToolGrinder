@@ -3,6 +3,7 @@ import math
 import os
 import argparse
 import sys
+import re
 
 def resource_path(*paths):
     """Return a path to a resource, supporting PyInstaller _MEIPASS extraction."""
@@ -196,7 +197,7 @@ def compute_front_start_positions(cfg):
 
     # Berechne anzahl_passe automatisch
     distance = abs(x_end - base_x)
-    anzahl_passe = int(distance / x_step) + 1 if x_step > 0 else 1
+    anzahl_passe = math.ceil(distance / x_step) + 1 if x_step > 0 else 1
 
     starts = []
     for p in range(1, anzahl_passe + 1):
@@ -227,6 +228,230 @@ def werkzeug_radius(cfg):
 def z_von_oberer_tangente(cfg, z_rel):
     """Konvertiert alte/top-bezogene Z-Werte auf Z0 im Werkzeug-Drehmittelpunkt."""
     return werkzeug_radius(cfg) + float(z_rel)
+
+
+AXIS_WORD_RE = re.compile(r'([XYZA])\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))', re.IGNORECASE)
+
+
+def machine_limits(cfg):
+    """Return optional axis limits from maschine.limits.
+
+    Expected keys are x_min/x_max, y_min/y_max, z_min/z_max and a_min/a_max.
+    Missing axes are intentionally ignored so existing configs keep working.
+    """
+    return cfg.get('maschine', {}).get('limits', {}) or {}
+
+
+def validate_machine_limits_config(cfg):
+    """Validate the optional machine limit section and return a list of errors."""
+    errors = []
+    limits = machine_limits(cfg)
+    for axis in ('x', 'y', 'z', 'a'):
+        min_key = f'{axis}_min'
+        max_key = f'{axis}_max'
+        has_min = min_key in limits
+        has_max = max_key in limits
+        if not has_min and not has_max:
+            continue
+
+        min_value = None
+        max_value = None
+        if has_min:
+            try:
+                min_value = float(limits[min_key])
+            except Exception:
+                errors.append(f'maschine.limits.{min_key} muss eine Zahl sein')
+        if has_max:
+            try:
+                max_value = float(limits[max_key])
+            except Exception:
+                errors.append(f'maschine.limits.{max_key} muss eine Zahl sein')
+        if min_value is not None and max_value is not None and min_value > max_value:
+            errors.append(f'maschine.limits.{min_key} darf nicht groesser als {max_key} sein')
+    return errors
+
+
+def parse_gcode_axes(line):
+    """Extract explicit X/Y/Z/A words from one G-code line."""
+    code = line.split(';', 1)[0].split('(', 1)[0]
+    return {axis.upper(): float(value) for axis, value in AXIS_WORD_RE.findall(code)}
+
+
+def validate_gcode_against_machine_limits(lines, cfg, tolerance=0.0001):
+    """Check generated G-code against optional machine limits."""
+    errors = validate_machine_limits_config(cfg)
+    limits = machine_limits(cfg)
+    if errors or not limits:
+        return errors
+
+    for line_no, line in enumerate(lines, start=1):
+        axes = parse_gcode_axes(line)
+        for axis, value in axes.items():
+            axis_key = axis.lower()
+            min_key = f'{axis_key}_min'
+            max_key = f'{axis_key}_max'
+            if min_key in limits and value < float(limits[min_key]) - tolerance:
+                errors.append(
+                    f'Zeile {line_no}: {axis}={value:.3f} unterschreitet {min_key}={float(limits[min_key]):.3f} | {line}'
+                )
+            if max_key in limits and value > float(limits[max_key]) + tolerance:
+                errors.append(
+                    f'Zeile {line_no}: {axis}={value:.3f} ueberschreitet {max_key}={float(limits[max_key]):.3f} | {line}'
+                )
+    return errors
+
+
+def ensure_gcode_within_machine_limits(lines, cfg):
+    """Raise ValueError if generated G-code violates configured machine limits."""
+    errors = validate_gcode_against_machine_limits(lines, cfg)
+    if errors:
+        raise ValueError('Maschinenlimit verletzt:\n- ' + '\n- '.join(errors))
+
+
+def probe_config(cfg):
+    """Return probing setup for measuring the cutter with a LinuxCNC touch probe."""
+    return cfg.get('aktionen', {}).get('vermessen', cfg.get('vermessen', {})) or {}
+
+
+def probe_ball_radius(cfg):
+    """Radius of the touch probe ball in mm."""
+    p = probe_config(cfg)
+    if 'tastkugel_durchmesser' in p:
+        return float(p.get('tastkugel_durchmesser')) / 2.0
+    tastkopf = cfg.get('tastkopf', {})
+    return float(tastkopf.get('kugel_durchmesser', 0.0)) / 2.0
+
+
+def validate_probe_config(cfg):
+    """Validate optional probing configuration for LinuxCNC measurement cycles."""
+    errors = []
+    p = probe_config(cfg)
+    if not p:
+        return errors
+    try:
+        if probe_ball_radius(cfg) <= 0:
+            errors.append('aktionen.vermessen.tastkugel_durchmesser muss > 0 sein')
+    except Exception:
+        errors.append('aktionen.vermessen.tastkugel_durchmesser muss eine Zahl sein')
+    for key in ('probe_feed', 'rapid_feed', 'retract'):
+        try:
+            if float(p.get(key, 0.0)) <= 0:
+                errors.append(f'aktionen.vermessen.{key} muss > 0 sein')
+        except Exception:
+            errors.append(f'aktionen.vermessen.{key} muss eine Zahl sein')
+    return errors
+
+
+def sign_from_direction(direction):
+    """Return +1 or -1 from a probing direction like +X, -Z, plus or minus."""
+    text = str(direction).strip().upper()
+    if text.startswith('+'):
+        return 1.0
+    if text.startswith('-'):
+        return -1.0
+    raise ValueError(f'Ungueltige Tastrichtung: {direction}')
+
+
+def korrigiere_tastpunkt_linear(kugelzentrum, richtung, kugel_durchmesser):
+    """Convert a probed ball-center coordinate to the contacted surface coordinate.
+
+    LinuxCNC reports the controlled point, normally the probe ball center. If the
+    probe moved in -X, the contacted surface is one ball radius below the center
+    along X. If it moved in +X, it is one ball radius above the center.
+    """
+    radius = float(kugel_durchmesser) / 2.0
+    return float(kugelzentrum) + sign_from_direction(richtung) * radius
+
+
+def berechne_durchmesser_aus_z_antastung(z_kugelzentrum, kugel_durchmesser, z_mitte=0.0, richtung='-Z'):
+    """Calculate cutter diameter from a Z probe hit on the outside diameter."""
+    oberflaeche_z = korrigiere_tastpunkt_linear(z_kugelzentrum, richtung, kugel_durchmesser)
+    return 2.0 * abs(float(oberflaeche_z) - float(z_mitte))
+
+
+def berechne_drall_grad_pro_mm(x1, a1, x2, a2):
+    """Calculate helix slope in degrees per mm from two probe points."""
+    dx = float(x2) - float(x1)
+    if abs(dx) < 0.000001:
+        raise ValueError('X-Abstand fuer Drallmessung darf nicht 0 sein')
+    return (float(a2) - float(a1)) / dx
+
+
+def gcode_linuxcnc_probe_header(cfg, config_file=None):
+    p = probe_config(cfg)
+    m = cfg.get('maschine', {})
+    lines = []
+    lines.append('%')
+    lines.append('(ToolGrinder Vermessen - LinuxCNC)')
+    if config_file:
+        lines.append(f'(Vorlage: {config_file})')
+    lines.append('(Tastpositionen werden von LinuxCNC in #5061..#5069 abgelegt)')
+    lines.append('G21')
+    lines.append('G90 G94')
+    lines.append('G40')
+    if m.get('nullpunkt') and m['nullpunkt'].get('code'):
+        lines.append(m['nullpunkt']['code'])
+    safe_z = float(p.get('safe_z', m.get('safe_z', 20.0)))
+    lines.append(f'G0 Z{safe_z:.3f}')
+    return lines
+
+
+def linuxcnc_probe_move(axis, target, feed, label):
+    axis = str(axis).upper()
+    lines = []
+    lines.append(f'({label})')
+    lines.append(f'G38.2 {axis}{float(target):.3f} F{float(feed):.3f}')
+    lines.append(f'(Probe result: X=#5061 Y=#5062 Z=#5063 A=#5064 success=#5070)')
+    return lines
+
+
+def generiere_linuxcnc_vermess_gcode(cfg, config_file=None):
+    """Generate a conservative LinuxCNC probing program for cutter setup."""
+    errors = validate_probe_config(cfg)
+    if errors:
+        raise ValueError('Fehler in Vermess-Konfiguration:\n- ' + '\n- '.join(errors))
+    p = probe_config(cfg)
+    if not p:
+        raise ValueError('Keine Section "aktionen.vermessen" in der Konfiguration gefunden.')
+
+    ausgabe = p.get('ausgabe_datei', 'fraeser_vermessen.ngc')
+    feed = float(p.get('probe_feed', 50.0))
+    retract = float(p.get('retract', 2.0))
+    safe_z = float(p.get('safe_z', cfg.get('maschine', {}).get('safe_z', 20.0)))
+    lines = gcode_linuxcnc_probe_header(cfg, config_file)
+    lines.append(f'(Tastkugel Durchmesser: {probe_ball_radius(cfg) * 2.0:.3f} mm)')
+
+    front_target = p.get('front_x_probe_target')
+    if front_target is not None:
+        lines += linuxcnc_probe_move('X', front_target, feed, 'Stirnkante in X antasten')
+        lines.append(f'G0 X[#5061 + {retract:.3f}]')
+
+    diameter_target = p.get('diameter_z_probe_target')
+    if diameter_target is not None:
+        lines.append(f'G0 Z{safe_z:.3f}')
+        lines += linuxcnc_probe_move('Z', diameter_target, feed, 'Aussendurchmesser in Z antasten')
+        lines.append(f'G0 Z[#5063 + {retract:.3f}]')
+
+    helix_points = p.get('drall_messpunkte', [])
+    if helix_points:
+        lines.append('(Drallmessung: jede Messposition manuell/halbautomatisch auf dieselbe Schneide ausrichten)')
+        for idx, point in enumerate(helix_points, start=1):
+            x = float(point.get('x', 0.0))
+            z = float(point.get('z_sicher', safe_z))
+            lines.append(f'(Drall Messpunkt {idx})')
+            lines.append(f'G0 Z{z:.3f}')
+            lines.append(f'G0 X{x:.3f}')
+            if 'z_probe_target' in point:
+                lines += linuxcnc_probe_move('Z', point['z_probe_target'], feed, f'Drall Messpunkt {idx} Z antasten')
+                lines.append(f'G0 Z[#5063 + {retract:.3f}]')
+
+    lines.append(f'G0 Z{safe_z:.3f}')
+    lines.append('M30')
+    lines.append('%')
+    ensure_gcode_within_machine_limits(lines, cfg)
+    with open(ausgabe, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(lines))
+    print(f'Vermess-G-Code erzeugt: {ausgabe}')
 
 
 # -------------------------------------------------
@@ -381,7 +606,7 @@ def generiere_front_gcode(cfg, config_file=None):
     
     # Berechne anzahl_passe automatisch aus (x_end - x_start) / zustellung_pro_pass
     distance = abs(x_end - base_x)
-    anzahl_passe = int(distance / x_step) + 1 if x_step > 0 else 1
+    anzahl_passe = math.ceil(distance / x_step) + 1 if x_step > 0 else 1
     
     for p in range(1, anzahl_passe + 1):
         # Compute start X for this pass
@@ -395,6 +620,8 @@ def generiere_front_gcode(cfg, config_file=None):
             break
 
     lines += gcode_front_footer(cfg)
+
+    ensure_gcode_within_machine_limits(lines, cfg)
 
     with open(ausgabe, 'w', encoding='utf-8') as fh:
         fh.write('\n'.join(lines))
@@ -1769,6 +1996,8 @@ def generiere_gcode(cfg, config_file=None):
 
     lines += gcode_footer(cfg)
 
+    ensure_gcode_within_machine_limits(lines, cfg)
+
     with open(ausgabe_datei, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
@@ -1785,7 +2014,7 @@ if __name__ == "__main__":
     parser.add_argument("--edit", action='store_true', help='Öffnet nach Auswahl den JSON-Editor (Save / Save As)')
     parser.add_argument("--open", help='Pfad zu einer beliebigen JSON-Datei zum Öffnen im Editor; Programm beendet danach', default=None)
     parser.add_argument("--nogui", action='store_true', help='Keine GUI verwenden; interaktiver CLI-Modus')
-    parser.add_argument("--mode", choices=['edge', 'front', 'both'], default='edge', help='Generierungsmodus: edge (Schneidekanten), front (Frontfläche), both (beides). Standard: edge')
+    parser.add_argument("--mode", choices=['edge', 'front', 'both', 'measure'], default='edge', help='Generierungsmodus: edge, front, both oder measure (LinuxCNC Vermessen). Standard: edge')
     args = parser.parse_args()
 
     # Handle --open: öffne die angegebene Datei im Editor und beende das Programm danach
@@ -1894,3 +2123,10 @@ if __name__ == "__main__":
                 print(f'Fehler bei Front G-Code Generierung: {e}', file=sys.stderr)
                 if mode == 'front':
                     sys.exit(1)
+
+    if mode == 'measure':
+        try:
+            generiere_linuxcnc_vermess_gcode(cfg, os.path.basename(config_datei))
+        except Exception as e:
+            print(f'Fehler bei Vermess-G-Code Generierung: {e}', file=sys.stderr)
+            sys.exit(1)

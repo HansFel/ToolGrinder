@@ -3,20 +3,96 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Grinder CNC</title>
+    <title>ToolGrinder CNC</title>
     <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
     <header class="topbar">
-        <div>
-            <h1>Grinder CNC</h1>
-            <p>G-Code Generator fuer 4-Achs Werkzeugschleifen (XYZA) · Z0 = Werkzeug-Drehmittelpunkt</p>
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div>
+                <h1>ToolGrinder CNC</h1>
+                <p>4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt</p>
+            </div>
         </div>
-        <div class="status" id="status">Bereit</div>
+        <div class="top-actions">
+            <div class="status" id="status">Bereit</div>
+            <button id="generateTop" type="button" class="primary compact">G-Code erzeugen</button>
+        </div>
     </header>
 
     <main class="layout">
-        <section class="panel controls">
+        <section class="panel machine-panel">
+            <div class="machine-visual" aria-label="Schematische Schleifsituation mit Drallfräser und Topfscheibe">
+                <svg viewBox="0 0 760 410" role="img">
+                    <defs>
+                        <linearGradient id="metal" x1="0" x2="1">
+                            <stop offset="0" stop-color="#d9e2e7"/>
+                            <stop offset=".22" stop-color="#ffffff"/>
+                            <stop offset=".5" stop-color="#9eaeb7"/>
+                            <stop offset=".78" stop-color="#eef3f5"/>
+                            <stop offset="1" stop-color="#8799a4"/>
+                        </linearGradient>
+                        <linearGradient id="wheelFace" x1="0" x2="1">
+                            <stop offset="0" stop-color="#7a858a"/>
+                            <stop offset=".45" stop-color="#c6cdd1"/>
+                            <stop offset="1" stop-color="#525d62"/>
+                        </linearGradient>
+                        <linearGradient id="flute" x1="0" x2="1">
+                            <stop offset="0" stop-color="#0d766c"/>
+                            <stop offset=".5" stop-color="#35a79b"/>
+                            <stop offset="1" stop-color="#0d514c"/>
+                        </linearGradient>
+                        <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="9" stdDeviation="8" flood-color="#10202a" flood-opacity=".2"/>
+                        </filter>
+                    </defs>
+
+                    <rect x="36" y="302" width="690" height="42" rx="4" fill="#cfd9df"/>
+                    <rect x="72" y="336" width="614" height="20" rx="3" fill="#8d9ba5"/>
+                    <path d="M112 308 L204 214 L632 214 L690 308 Z" fill="#e7edf1"/>
+                    <path d="M205 214 L632 214" stroke="#8998a3" stroke-width="5"/>
+
+                    <g class="axis-lines">
+                        <path d="M148 276 H650"/>
+                        <path d="M250 343 V96"/>
+                        <path d="M250 276 C305 224 365 224 420 276"/>
+                    </g>
+
+                    <g class="tool" filter="url(#softShadow)">
+                        <rect x="154" y="237" width="340" height="52" rx="26" fill="url(#metal)"/>
+                        <rect x="104" y="231" width="88" height="64" rx="8" fill="#788894"/>
+                        <circle cx="250" cy="263" r="6" fill="#17202a"/>
+                        <path class="flute flute-a" d="M190 242 C245 210 313 304 368 271 C408 248 430 238 490 243 L490 258 C429 252 406 268 367 288 C310 326 244 230 190 260 Z" fill="url(#flute)"/>
+                        <path class="flute flute-b" d="M195 271 C250 238 316 329 371 297 C414 272 438 265 492 272 L492 287 C434 281 413 296 372 315 C314 351 251 259 195 289 Z" fill="#173744" opacity=".88"/>
+                        <path class="edge-line" d="M198 241 C250 219 314 302 370 270 C410 248 438 239 490 244"/>
+                        <path class="edge-line" d="M197 271 C251 247 317 329 373 298 C416 276 438 266 491 273"/>
+                    </g>
+
+                    <g class="wheel" filter="url(#softShadow)">
+                        <rect x="592" y="72" width="58" height="190" rx="8" fill="#56646b"/>
+                        <ellipse cx="590" cy="167" rx="56" ry="96" fill="url(#wheelFace)"/>
+                        <ellipse cx="590" cy="167" rx="29" ry="53" fill="#e9eef1"/>
+                        <ellipse cx="590" cy="167" rx="11" ry="22" fill="#78848b"/>
+                        <path d="M535 118 C557 144 556 192 535 218" fill="none" stroke="#edf3f5" stroke-width="7" opacity=".75"/>
+                        <path class="spark" d="M526 248 L492 270 M529 235 L486 244 M528 260 L506 294"/>
+                    </g>
+
+                    <g class="labels">
+                        <text x="138" y="88">A-Achse dreht um X</text>
+                        <text x="518" y="48">Topfscheibe / Z-Spindel</text>
+                        <text x="266" y="251">Z0</text>
+                        <text x="510" y="333">Schleifkontakt</text>
+                    </g>
+                </svg>
+            </div>
+
+            <div class="machine-readout">
+                <div><span>Fräser</span><strong id="readoutTool">-</strong></div>
+                <div><span>Schneiden</span><strong id="readoutFlutes">-</strong></div>
+                <div><span>Ziel Ø</span><strong id="readoutTarget">-</strong></div>
+            </div>
+
             <div class="field">
                 <label for="templateSelect">Vorlage</label>
                 <select id="templateSelect">
@@ -35,17 +111,19 @@
                     <label for="modeEdge">Edge</label>
                     <input type="radio" id="modeFront" name="mode" value="front">
                     <label for="modeFront">Front</label>
+                    <input type="radio" id="modeMeasure" name="mode" value="measure">
+                    <label for="modeMeasure">Vermessen</label>
                 </div>
             </div>
 
             <div class="quick-grid">
-                <label>Fraeser D
+                <label>Fräser Ø
                     <input id="toolDiameter" type="number" step="0.01">
                 </label>
                 <label>Schneiden
                     <input id="flutes" type="number" step="1">
                 </label>
-                <label>Ziel D
+                <label>Ziel Ø
                     <input id="targetDiameter" type="number" step="0.01">
                 </label>
                 <label>Front X Ende
@@ -53,8 +131,38 @@
                 </label>
             </div>
 
+            <div class="limit-group">
+                <div class="limit-title">Maschinenlimits</div>
+                <div class="limit-grid">
+                    <label>X min
+                        <input id="limitXMin" type="number" step="0.01">
+                    </label>
+                    <label>X max
+                        <input id="limitXMax" type="number" step="0.01">
+                    </label>
+                    <label>Y min
+                        <input id="limitYMin" type="number" step="0.01">
+                    </label>
+                    <label>Y max
+                        <input id="limitYMax" type="number" step="0.01">
+                    </label>
+                    <label>Z min
+                        <input id="limitZMin" type="number" step="0.01">
+                    </label>
+                    <label>Z max
+                        <input id="limitZMax" type="number" step="0.01">
+                    </label>
+                    <label>A min
+                        <input id="limitAMin" type="number" step="0.01">
+                    </label>
+                    <label>A max
+                        <input id="limitAMax" type="number" step="0.01">
+                    </label>
+                </div>
+            </div>
+
             <div class="actions">
-                <button id="applyQuick" type="button">Werte uebernehmen</button>
+                <button id="applyQuick" type="button">Werte übernehmen</button>
                 <button id="generate" type="button" class="primary">G-Code erzeugen</button>
             </div>
 

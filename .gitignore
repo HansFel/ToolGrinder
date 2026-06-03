@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+
+.grinder_*.json
+ollama.log
+
+*.ngc
+data/generated/
+
+build/
+dist/
