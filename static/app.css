@@ -264,12 +264,22 @@ textarea:focus {
     margin-bottom: 16px;
 }
 
-.limit-group {
+.limit-group,
+.measure-group {
     margin-bottom: 16px;
     padding: 10px;
     border: 1px solid var(--line);
     border-radius: 7px;
     background: #fbfcfd;
+}
+
+.measure-group {
+    background: #f4f9f8;
+    border-color: #bfd6d2;
+}
+
+[hidden] {
+    display: none !important;
 }
 
 .limit-title {

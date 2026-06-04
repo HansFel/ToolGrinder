@@ -6,6 +6,7 @@ const previewNameEl = document.getElementById("previewName");
 const readoutToolEl = document.getElementById("readoutTool");
 const readoutFlutesEl = document.getElementById("readoutFlutes");
 const readoutTargetEl = document.getElementById("readoutTarget");
+const measureGroupEl = document.getElementById("measureGroup");
 const limitMappings = [
     ["limitXMin", "x_min"],
     ["limitXMax", "x_max"],
@@ -16,6 +17,25 @@ const limitMappings = [
     ["limitAMin", "a_min"],
     ["limitAMax", "a_max"],
 ];
+const probeMappings = [
+    ["probeBallDiameter", "tastkugel_durchmesser"],
+    ["probeFeed", "probe_feed"],
+    ["probeSafeZ", "safe_z"],
+    ["probeRetract", "retract"],
+    ["probeFrontXTarget", "front_x_probe_target"],
+    ["probeDiameterZTarget", "diameter_z_probe_target"],
+];
+const defaultProbeConfig = {
+    steuerung: "linuxcnc",
+    tastkugel_durchmesser: 3.0,
+    probe_feed: 50.0,
+    rapid_feed: 800.0,
+    safe_z: 20.0,
+    retract: 2.0,
+    front_x_probe_target: -5.0,
+    diameter_z_probe_target: -2.0,
+    ausgabe_datei: "fraeser_vermessen.ngc",
+};
 
 function setStatus(text) {
     statusEl.textContent = text;
@@ -39,6 +59,10 @@ function fillQuickFields(cfg) {
     document.getElementById("flutes").value = flutes;
     document.getElementById("targetDiameter").value = target;
     document.getElementById("frontXEnd").value = cfg?.aktionen?.front?.x_end ?? "";
+    const probe = {...defaultProbeConfig, ...(cfg?.aktionen?.vermessen || {})};
+    for (const [id, key] of probeMappings) {
+        document.getElementById(id).value = probe[key] ?? "";
+    }
     for (const [id, key] of limitMappings) {
         document.getElementById(id).value = cfg?.maschine?.limits?.[key] ?? "";
     }
@@ -54,6 +78,7 @@ function applyQuickFields() {
     cfg.aktionen = cfg.aktionen || {};
     cfg.aktionen.schneiden = cfg.aktionen.schneiden || {};
     cfg.aktionen.front = cfg.aktionen.front || {};
+    cfg.aktionen.vermessen = {...defaultProbeConfig, ...(cfg.aktionen.vermessen || {})};
     cfg.maschine = cfg.maschine || {};
     cfg.maschine.limits = cfg.maschine.limits || {};
 
@@ -67,6 +92,17 @@ function applyQuickFields() {
         const value = document.getElementById(id).value;
         if (value !== "") target[key] = Number(value);
     }
+    for (const [id, key] of probeMappings) {
+        const value = document.getElementById(id).value;
+        if (value === "") {
+            delete cfg.aktionen.vermessen[key];
+        } else {
+            cfg.aktionen.vermessen[key] = Number(value);
+        }
+    }
+    cfg.aktionen.vermessen.rapid_feed = Number(cfg.aktionen.vermessen.rapid_feed || defaultProbeConfig.rapid_feed);
+    cfg.aktionen.vermessen.steuerung = cfg.aktionen.vermessen.steuerung || defaultProbeConfig.steuerung;
+    cfg.aktionen.vermessen.ausgabe_datei = cfg.aktionen.vermessen.ausgabe_datei || defaultProbeConfig.ausgabe_datei;
     for (const [id, key] of limitMappings) {
         const value = document.getElementById(id).value;
         if (value === "") {
@@ -100,8 +136,8 @@ async function generate() {
 
     let cfg;
     try {
+        applyQuickFields();
         cfg = readConfig();
-        fillQuickFields(cfg);
     } catch (error) {
         showErrors(["JSON ist ungültig: " + error.message]);
         setStatus("Fehler");
@@ -163,6 +199,10 @@ document.getElementById("templateSelect").addEventListener("change", event => {
     });
 });
 
+document.querySelectorAll("input[name=mode]").forEach(input => {
+    input.addEventListener("change", updateModePanels);
+});
+
 document.getElementById("applyQuick").addEventListener("click", () => {
     try {
         applyQuickFields();
@@ -201,6 +241,9 @@ editor.addEventListener("input", () => {
         readoutToolEl.textContent = "-";
         readoutFlutesEl.textContent = "-";
         readoutTargetEl.textContent = "-";
+        for (const [id] of probeMappings) {
+            document.getElementById(id).value = "";
+        }
         for (const [id] of limitMappings) {
             document.getElementById(id).value = "";
         }
@@ -213,4 +256,10 @@ function formatNumber(value) {
     return number.toLocaleString("de-DE", {maximumFractionDigits: 2});
 }
 
+function updateModePanels() {
+    const mode = document.querySelector("input[name=mode]:checked").value;
+    measureGroupEl.hidden = mode !== "measure";
+}
+
 fillQuickFields(window.initialConfig);
+updateModePanels();
