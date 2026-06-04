@@ -9,6 +9,7 @@ from Grinder import (
     berechne_drall_grad_pro_mm,
     generiere_linuxcnc_vermess_gcode,
     korrigiere_tastpunkt_linear,
+    probe_a_search_span,
     probe_ball_radius,
     probe_y_center_for_helix,
     validate_probe_config,
@@ -27,6 +28,16 @@ class TestProbeMeasurement(unittest.TestCase):
         self.template['aktionen']['vermessen']['drallrichtung'] = 'rechts'
 
         self.assertEqual(probe_y_center_for_helix(self.template), 1.5)
+
+    def test_a_search_span_uses_one_flute_pitch(self):
+        cfg = json.loads(json.dumps(self.template))
+
+        cfg['fraeser']['schneidenanzahl'] = 1
+        self.assertEqual(probe_a_search_span(cfg), 360.0)
+        cfg['fraeser']['schneidenanzahl'] = 2
+        self.assertEqual(probe_a_search_span(cfg), 180.0)
+        cfg['fraeser']['schneidenanzahl'] = 3
+        self.assertEqual(probe_a_search_span(cfg), 120.0)
 
     def test_linear_probe_correction(self):
         self.assertEqual(korrigiere_tastpunkt_linear(10.0, '-X', 3.0), 8.5)
@@ -52,7 +63,7 @@ class TestProbeMeasurement(unittest.TestCase):
 
         self.assertIn('G38.2 X-5.000 F50.000', text)
         self.assertIn('G0 Y1.500', text)
-        self.assertIn('O100 WHILE [#<_tg_a> LE 360.000]', text)
+        self.assertIn('O100 WHILE [#<_tg_a> LE 90.000]', text)
         self.assertIn('G38.2 Z#<_tg_probe_target_z> F#<_tg_probe_feed>', text)
         self.assertIn('O101 IF [#5063 GT #<_tg_best_z>]', text)
         self.assertIn('G0 A#<_tg_best_a>', text)

@@ -38,8 +38,10 @@ Tasterfolg. Die Software nutzt diese Konvention als Grundlage fuer:
 - Stirnkante/Laenge in X-Richtung
 - Durchmesserermittlung ueber Z-Antastung mit Tastkugelradius-Korrektur:
   die A-Achse wird in kleinen Schritten gedreht, bis der hoechste Z-Tastpunkt
-  gefunden ist. Bei rechtsdrehendem Fraeser faehrt der Mittelpunkt der
-  Tastkugel in Y auf den Tastkugelradius.
+  gefunden ist. Der Suchwinkel entspricht einer Schneidenteilung:
+  `360 / schneidenanzahl`, also 360 Grad bei Einschneider, 180 Grad bei
+  Zweischneider und 120 Grad bei Dreischneider. Bei rechtsdrehendem Fraeser
+  faehrt der Mittelpunkt der Tastkugel in Y auf den Tastkugelradius.
 - Drallberechnung aus zwei Messpunkten: `(A2 - A1) / (X2 - X1)`
 
 Beispiel:

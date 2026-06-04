@@ -39,7 +39,6 @@ const defaultProbeConfig = {
     front_x_probe_target: -5.0,
     diameter_z_probe_target: -2.0,
     a_such_start: 0.0,
-    a_such_ende: 360.0,
     a_such_schritt: 2.0,
     ausgabe_datei: "fraeser_vermessen.ngc",
 };
@@ -67,6 +66,7 @@ function fillQuickFields(cfg) {
     document.getElementById("targetDiameter").value = target;
     document.getElementById("frontXEnd").value = cfg?.aktionen?.front?.x_end ?? "";
     const probe = {...defaultProbeConfig, ...(cfg?.aktionen?.vermessen || {})};
+    probe.a_such_ende = probe.a_such_ende ?? computeAEndFromFlutes(flutes, probe.a_such_start);
     document.getElementById("probeHelixDirection").value = probe.drallrichtung || defaultProbeConfig.drallrichtung;
     for (const [id, key] of probeMappings) {
         document.getElementById(id).value = probe[key] ?? "";
@@ -212,6 +212,11 @@ document.querySelectorAll("input[name=mode]").forEach(input => {
     input.addEventListener("change", updateModePanels);
 });
 
+document.getElementById("flutes").addEventListener("input", () => {
+    const start = document.getElementById("probeAStart").value || 0;
+    document.getElementById("probeAEnd").value = computeAEndFromFlutes(document.getElementById("flutes").value, start);
+});
+
 document.getElementById("applyQuick").addEventListener("click", () => {
     try {
         applyQuickFields();
@@ -264,6 +269,13 @@ function formatNumber(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return value;
     return number.toLocaleString("de-DE", {maximumFractionDigits: 2});
+}
+
+function computeAEndFromFlutes(flutes, start = 0) {
+    const count = Number(flutes);
+    const startAngle = Number(start) || 0;
+    if (!Number.isFinite(count) || count <= 0) return 360 + startAngle;
+    return startAngle + (360 / count);
 }
 
 function updateModePanels() {

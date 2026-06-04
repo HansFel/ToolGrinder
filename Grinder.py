@@ -336,6 +336,10 @@ def validate_probe_config(cfg):
             errors.append('aktionen.vermessen.tastkugel_durchmesser muss > 0 sein')
     except Exception:
         errors.append('aktionen.vermessen.tastkugel_durchmesser muss eine Zahl sein')
+    try:
+        probe_a_search_span(cfg)
+    except Exception:
+        errors.append('fraeser.schneidenanzahl muss > 0 sein')
     for key in ('probe_feed', 'rapid_feed', 'retract'):
         try:
             if float(p.get(key, 0.0)) <= 0:
@@ -350,7 +354,9 @@ def validate_probe_config(cfg):
             errors.append('aktionen.vermessen.a_such_schritt muss eine Zahl sein')
     if 'a_such_start' in p or 'a_such_ende' in p:
         try:
-            if float(p.get('a_such_ende', 360.0)) < float(p.get('a_such_start', 0.0)):
+            a_start = float(p.get('a_such_start', 0.0))
+            a_end = float(p.get('a_such_ende', a_start + probe_a_search_span(cfg)))
+            if a_end < a_start:
                 errors.append('aktionen.vermessen.a_such_ende muss groesser oder gleich a_such_start sein')
         except Exception:
             errors.append('aktionen.vermessen.a_such_start/a_such_ende muessen Zahlen sein')
@@ -390,6 +396,19 @@ def berechne_drall_grad_pro_mm(x1, a1, x2, a2):
     if abs(dx) < 0.000001:
         raise ValueError('X-Abstand fuer Drallmessung darf nicht 0 sein')
     return (float(a2) - float(a1)) / dx
+
+
+def fraeser_schneidenanzahl(cfg):
+    """Return configured flute count, supporting old and new config names."""
+    return int(cfg.get('fraeser', cfg.get('werkzeug', {})).get('schneidenanzahl', 1))
+
+
+def probe_a_search_span(cfg):
+    """Return the angular search span for one flute pitch."""
+    flutes = fraeser_schneidenanzahl(cfg)
+    if flutes <= 0:
+        raise ValueError('fraeser.schneidenanzahl muss > 0 sein')
+    return 360.0 / flutes
 
 
 def gcode_linuxcnc_probe_header(cfg, config_file=None):
@@ -441,7 +460,7 @@ def linuxcnc_probe_diameter_highest_point(cfg, target, feed, safe_z, retract):
     y_center = probe_y_center_for_helix(cfg)
     z_center = float(p.get('z_mitte', 0.0))
     a_start = float(p.get('a_such_start', 0.0))
-    a_end = float(p.get('a_such_ende', 360.0))
+    a_end = float(p.get('a_such_ende', a_start + probe_a_search_span(cfg)))
     a_step = float(p.get('a_such_schritt', 2.0))
     lines = []
     lines.append('(Aussendurchmesser: hoechste Schneidenstelle ueber A-Suche finden)')
