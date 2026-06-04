@@ -10,6 +10,7 @@ from Grinder import (
     generiere_linuxcnc_vermess_gcode,
     korrigiere_tastpunkt_linear,
     probe_ball_radius,
+    probe_y_center_for_helix,
     validate_probe_config,
 )
 
@@ -21,6 +22,11 @@ class TestProbeMeasurement(unittest.TestCase):
 
     def test_probe_ball_radius_from_measure_config(self):
         self.assertEqual(probe_ball_radius(self.template), 1.5)
+
+    def test_right_hand_probe_y_center_uses_ball_radius(self):
+        self.template['aktionen']['vermessen']['drallrichtung'] = 'rechts'
+
+        self.assertEqual(probe_y_center_for_helix(self.template), 1.5)
 
     def test_linear_probe_correction(self):
         self.assertEqual(korrigiere_tastpunkt_linear(10.0, '-X', 3.0), 8.5)
@@ -45,7 +51,12 @@ class TestProbeMeasurement(unittest.TestCase):
             text = Path(cfg['aktionen']['vermessen']['ausgabe_datei']).read_text(encoding='utf-8')
 
         self.assertIn('G38.2 X-5.000 F50.000', text)
-        self.assertIn('G38.2 Z-2.000 F50.000', text)
+        self.assertIn('G0 Y1.500', text)
+        self.assertIn('O100 WHILE [#<_tg_a> LE 360.000]', text)
+        self.assertIn('G38.2 Z#<_tg_probe_target_z> F#<_tg_probe_feed>', text)
+        self.assertIn('O101 IF [#5063 GT #<_tg_best_z>]', text)
+        self.assertIn('G0 A#<_tg_best_a>', text)
+        self.assertIn('#<_tg_diameter>', text)
         self.assertIn('#5061', text)
         self.assertIn('#5070', text)
 

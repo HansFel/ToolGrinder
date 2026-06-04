@@ -134,6 +134,12 @@
             <div class="measure-group" id="measureGroup">
                 <div class="limit-title">Werkzeug antasten</div>
                 <div class="limit-grid">
+                    <label>Drallrichtung
+                        <select id="probeHelixDirection">
+                            <option value="rechts">Rechts</option>
+                            <option value="links">Links</option>
+                        </select>
+                    </label>
                     <label>Tastkugel Ø
                         <input id="probeBallDiameter" type="number" step="0.01">
                     </label>
@@ -151,6 +157,15 @@
                     </label>
                     <label>Durchmesser Z Ziel
                         <input id="probeDiameterZTarget" type="number" step="0.01">
+                    </label>
+                    <label>A Start
+                        <input id="probeAStart" type="number" step="0.1">
+                    </label>
+                    <label>A Ende
+                        <input id="probeAEnd" type="number" step="0.1">
+                    </label>
+                    <label>A Schritt
+                        <input id="probeAStep" type="number" step="0.1">
                     </label>
                 </div>
             </div>

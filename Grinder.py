@@ -328,6 +328,9 @@ def validate_probe_config(cfg):
     p = probe_config(cfg)
     if not p:
         return errors
+    direction = str(p.get('drallrichtung', cfg.get('fraeser', {}).get('drallrichtung', 'rechts'))).lower()
+    if direction not in ('rechts', 'right', 'rh', 'links', 'left', 'lh'):
+        errors.append('aktionen.vermessen.drallrichtung muss rechts oder links sein')
     try:
         if probe_ball_radius(cfg) <= 0:
             errors.append('aktionen.vermessen.tastkugel_durchmesser muss > 0 sein')
@@ -339,6 +342,18 @@ def validate_probe_config(cfg):
                 errors.append(f'aktionen.vermessen.{key} muss > 0 sein')
         except Exception:
             errors.append(f'aktionen.vermessen.{key} muss eine Zahl sein')
+    if 'a_such_schritt' in p:
+        try:
+            if float(p.get('a_such_schritt')) <= 0:
+                errors.append('aktionen.vermessen.a_such_schritt muss > 0 sein')
+        except Exception:
+            errors.append('aktionen.vermessen.a_such_schritt muss eine Zahl sein')
+    if 'a_such_start' in p or 'a_such_ende' in p:
+        try:
+            if float(p.get('a_such_ende', 360.0)) < float(p.get('a_such_start', 0.0)):
+                errors.append('aktionen.vermessen.a_such_ende muss groesser oder gleich a_such_start sein')
+        except Exception:
+            errors.append('aktionen.vermessen.a_such_start/a_such_ende muessen Zahlen sein')
     return errors
 
 
@@ -405,6 +420,58 @@ def linuxcnc_probe_move(axis, target, feed, label):
     return lines
 
 
+def probe_y_center_for_helix(cfg):
+    """Return the probe ball Y center for the cutter helix direction."""
+    p = probe_config(cfg)
+    if 'tast_y_mitte' in p:
+        return float(p['tast_y_mitte'])
+    direction = str(p.get('drallrichtung', cfg.get('fraeser', {}).get('drallrichtung', 'rechts'))).lower()
+    radius = probe_ball_radius(cfg)
+    if direction in ('rechts', 'right', 'rh'):
+        return radius
+    if direction in ('links', 'left', 'lh'):
+        return -radius
+    raise ValueError(f'Ungueltige Drallrichtung fuer Vermessung: {direction}')
+
+
+def linuxcnc_probe_diameter_highest_point(cfg, target, feed, safe_z, retract):
+    """Generate LinuxCNC O-code to find the highest cutter point by rotating A."""
+    p = probe_config(cfg)
+    ball_radius = probe_ball_radius(cfg)
+    y_center = probe_y_center_for_helix(cfg)
+    z_center = float(p.get('z_mitte', 0.0))
+    a_start = float(p.get('a_such_start', 0.0))
+    a_end = float(p.get('a_such_ende', 360.0))
+    a_step = float(p.get('a_such_schritt', 2.0))
+    lines = []
+    lines.append('(Aussendurchmesser: hoechste Schneidenstelle ueber A-Suche finden)')
+    lines.append(f'(Drallrichtung: {p.get("drallrichtung", cfg.get("fraeser", {}).get("drallrichtung", "rechts"))})')
+    lines.append(f'G0 Z{float(safe_z):.3f}')
+    lines.append(f'G0 Y{y_center:.3f}   (Tastkugel-Mittelpunkt seitlich zur Schneide)')
+    lines.append(f'#<_tg_a> = {a_start:.3f}')
+    lines.append('#<_tg_best_z> = -999999.000')
+    lines.append(f'#<_tg_best_a> = {a_start:.3f}')
+    lines.append(f'#<_tg_probe_target_z> = {float(target):.3f}')
+    lines.append(f'#<_tg_probe_feed> = {float(feed):.3f}')
+    lines.append(f'#<_tg_retract> = {float(retract):.3f}')
+    lines.append(f'O100 WHILE [#<_tg_a> LE {a_end:.3f}]')
+    lines.append(f'  G0 Z{float(safe_z):.3f}')
+    lines.append('  G0 A#<_tg_a>')
+    lines.append('  G38.2 Z#<_tg_probe_target_z> F#<_tg_probe_feed>')
+    lines.append('  O101 IF [#5063 GT #<_tg_best_z>]')
+    lines.append('    #<_tg_best_z> = #5063')
+    lines.append('    #<_tg_best_a> = #<_tg_a>')
+    lines.append('  O101 ENDIF')
+    lines.append('  G0 Z[#5063 + #<_tg_retract>]')
+    lines.append(f'  #<_tg_a> = [#<_tg_a> + {a_step:.3f}]')
+    lines.append('O100 ENDWHILE')
+    lines.append(f'G0 Z{float(safe_z):.3f}')
+    lines.append('G0 A#<_tg_best_a>')
+    lines.append(f'#<_tg_diameter> = [2 * ABS[[#<_tg_best_z> - {ball_radius:.3f}] - {z_center:.3f}]]')
+    lines.append('(Ergebnis: beste A-Stellung=#<_tg_best_a>, Kugelzentrum Z=#<_tg_best_z>, Durchmesser=#<_tg_diameter>)')
+    return lines
+
+
 def generiere_linuxcnc_vermess_gcode(cfg, config_file=None):
     """Generate a conservative LinuxCNC probing program for cutter setup."""
     errors = validate_probe_config(cfg)
@@ -428,9 +495,7 @@ def generiere_linuxcnc_vermess_gcode(cfg, config_file=None):
 
     diameter_target = p.get('diameter_z_probe_target')
     if diameter_target is not None:
-        lines.append(f'G0 Z{safe_z:.3f}')
-        lines += linuxcnc_probe_move('Z', diameter_target, feed, 'Aussendurchmesser in Z antasten')
-        lines.append(f'G0 Z[#5063 + {retract:.3f}]')
+        lines += linuxcnc_probe_diameter_highest_point(cfg, diameter_target, feed, safe_z, retract)
 
     helix_points = p.get('drall_messpunkte', [])
     if helix_points:

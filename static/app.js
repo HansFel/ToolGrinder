@@ -24,9 +24,13 @@ const probeMappings = [
     ["probeRetract", "retract"],
     ["probeFrontXTarget", "front_x_probe_target"],
     ["probeDiameterZTarget", "diameter_z_probe_target"],
+    ["probeAStart", "a_such_start"],
+    ["probeAEnd", "a_such_ende"],
+    ["probeAStep", "a_such_schritt"],
 ];
 const defaultProbeConfig = {
     steuerung: "linuxcnc",
+    drallrichtung: "rechts",
     tastkugel_durchmesser: 3.0,
     probe_feed: 50.0,
     rapid_feed: 800.0,
@@ -34,6 +38,9 @@ const defaultProbeConfig = {
     retract: 2.0,
     front_x_probe_target: -5.0,
     diameter_z_probe_target: -2.0,
+    a_such_start: 0.0,
+    a_such_ende: 360.0,
+    a_such_schritt: 2.0,
     ausgabe_datei: "fraeser_vermessen.ngc",
 };
 
@@ -60,6 +67,7 @@ function fillQuickFields(cfg) {
     document.getElementById("targetDiameter").value = target;
     document.getElementById("frontXEnd").value = cfg?.aktionen?.front?.x_end ?? "";
     const probe = {...defaultProbeConfig, ...(cfg?.aktionen?.vermessen || {})};
+    document.getElementById("probeHelixDirection").value = probe.drallrichtung || defaultProbeConfig.drallrichtung;
     for (const [id, key] of probeMappings) {
         document.getElementById(id).value = probe[key] ?? "";
     }
@@ -79,6 +87,7 @@ function applyQuickFields() {
     cfg.aktionen.schneiden = cfg.aktionen.schneiden || {};
     cfg.aktionen.front = cfg.aktionen.front || {};
     cfg.aktionen.vermessen = {...defaultProbeConfig, ...(cfg.aktionen.vermessen || {})};
+    cfg.aktionen.vermessen.drallrichtung = document.getElementById("probeHelixDirection").value || defaultProbeConfig.drallrichtung;
     cfg.maschine = cfg.maschine || {};
     cfg.maschine.limits = cfg.maschine.limits || {};
 
@@ -244,6 +253,7 @@ editor.addEventListener("input", () => {
         for (const [id] of probeMappings) {
             document.getElementById(id).value = "";
         }
+        document.getElementById("probeHelixDirection").value = defaultProbeConfig.drallrichtung;
         for (const [id] of limitMappings) {
             document.getElementById(id).value = "";
         }

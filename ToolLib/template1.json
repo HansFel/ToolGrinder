@@ -71,6 +71,7 @@
         },
         "vermessen": {
             "steuerung": "linuxcnc",
+            "drallrichtung": "rechts",
             "tastkugel_durchmesser": 3.0,
             "probe_feed": 50.0,
             "rapid_feed": 800.0,
@@ -78,6 +79,9 @@
             "retract": 2.0,
             "front_x_probe_target": -5.0,
             "diameter_z_probe_target": -2.0,
+            "a_such_start": 0.0,
+            "a_such_ende": 360.0,
+            "a_such_schritt": 2.0,
             "ausgabe_datei": "fraeser_vermessen.ngc",
             "drall_messpunkte": [
                 {
