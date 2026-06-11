@@ -54,6 +54,44 @@ class TestProbeMeasurement(unittest.TestCase):
     def test_probe_config_validates_template(self):
         self.assertEqual(validate_probe_config(self.template), [])
 
+    def test_probe_config_rejects_duplicate_result_parameters(self):
+        cfg = json.loads(json.dumps(self.template))
+        cfg['aktionen']['vermessen']['ergebnis_parameter']['durchmesser'] = 4901
+
+        errors = validate_probe_config(cfg)
+
+        self.assertTrue(any('bereits' in error for error in errors))
+
+    def test_probe_config_requires_two_distinct_helix_positions(self):
+        cfg = json.loads(json.dumps(self.template))
+        cfg['aktionen']['vermessen']['drall_messpunkte'][1]['x'] = 0.0
+
+        errors = validate_probe_config(cfg)
+
+        self.assertTrue(any('unterschiedliche X-Werte' in error for error in errors))
+
+    def test_probe_config_checks_variable_targets_against_machine_limits(self):
+        cfg = json.loads(json.dumps(self.template))
+        cfg['aktionen']['vermessen']['diameter_z_probe_target'] = -6.0
+
+        errors = validate_probe_config(cfg)
+
+        self.assertTrue(any('diameter_z_probe_target' in error and 'z_min' in error for error in errors))
+
+    def test_rapid_feed_is_optional(self):
+        cfg = json.loads(json.dumps(self.template))
+        del cfg['aktionen']['vermessen']['rapid_feed']
+
+        self.assertEqual(validate_probe_config(cfg), [])
+
+    def test_invalid_search_angle_returns_validation_error(self):
+        cfg = json.loads(json.dumps(self.template))
+        cfg['aktionen']['vermessen']['a_such_start'] = 'links'
+
+        errors = validate_probe_config(cfg)
+
+        self.assertTrue(any('a_such_start' in error for error in errors))
+
     def test_linuxcnc_measure_gcode_contains_probe_moves(self):
         cfg = json.loads(json.dumps(self.template))
         with tempfile.TemporaryDirectory() as tmp:
@@ -61,13 +99,21 @@ class TestProbeMeasurement(unittest.TestCase):
             generiere_linuxcnc_vermess_gcode(cfg, 'test.json')
             text = Path(cfg['aktionen']['vermessen']['ausgabe_datei']).read_text(encoding='utf-8')
 
-        self.assertIn('G38.2 X-5.000 F50.000', text)
+        self.assertIn('G38.3 X-5.000 F50.000', text)
+        self.assertIn('o100 if [#<_task> AND [#5070 EQ 0]]', text)
+        self.assertIn('(abort,ToolGrinder: Kein Tastkontakt - Stirnkante in X antasten)', text)
         self.assertIn('G0 Y1.500', text)
-        self.assertIn('O100 WHILE [#<_tg_a> LE 90.000]', text)
-        self.assertIn('G38.2 Z#<_tg_probe_target_z> F#<_tg_probe_feed>', text)
-        self.assertIn('O101 IF [#5063 GT #<_tg_best_z>]', text)
+        self.assertIn('o110 while [#<_tg_a> LE 90.000]', text)
+        self.assertIn('G38.3 Z#<_tg_probe_target_z> F#<_tg_probe_feed>', text)
+        self.assertIn('o111 if [#5063 GT #<_tg_best_z>]', text)
         self.assertIn('G0 A#<_tg_best_a>', text)
         self.assertIn('#<_tg_diameter>', text)
+        self.assertIn('#<_tg_helix_slope>', text)
+        self.assertIn('#<_tg_helix_delta_a>', text)
+        self.assertIn('#4901 = #<_tg_front_x>', text)
+        self.assertIn('#4902 = #<_tg_diameter>', text)
+        self.assertIn('#4903 = #<_tg_helix_slope>', text)
+        self.assertIn('#4904 = #<_tg_best_a>', text)
         self.assertIn('#5061', text)
         self.assertIn('#5070', text)
 

@@ -82,6 +82,12 @@
             "a_such_start": 0.0,
             "a_such_ende": 90.0,
             "a_such_schritt": 2.0,
+            "ergebnis_parameter": {
+                "stirnkante_x": 4901,
+                "durchmesser": 4902,
+                "drall_grad_pro_mm": 4903,
+                "beste_a_position": 4904
+            },
             "ausgabe_datei": "fraeser_vermessen.ngc",
             "drall_messpunkte": [
                 {

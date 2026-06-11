@@ -136,7 +136,8 @@ def load_template(name):
 def validate_config(cfg, mode):
     errors = []
     errors.extend(validate_machine_limits_config(cfg))
-    errors.extend(validate_probe_config(cfg))
+    if mode == "measure":
+        errors.extend(validate_probe_config(cfg))
     if mode in {"edge", "both"}:
         for key in ("maschine", "fraeser"):
             if key not in cfg:

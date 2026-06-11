@@ -273,7 +273,7 @@ def validate_machine_limits_config(cfg):
 
 def parse_gcode_axes(line):
     """Extract explicit X/Y/Z/A words from one G-code line."""
-    code = line.split(';', 1)[0].split('(', 1)[0]
+    code = re.sub(r'\([^)]*\)', '', line.split(';', 1)[0])
     return {axis.upper(): float(value) for axis, value in AXIS_WORD_RE.findall(code)}
 
 
@@ -340,12 +340,18 @@ def validate_probe_config(cfg):
         probe_a_search_span(cfg)
     except Exception:
         errors.append('fraeser.schneidenanzahl muss > 0 sein')
-    for key in ('probe_feed', 'rapid_feed', 'retract'):
+    for key in ('probe_feed', 'retract'):
         try:
             if float(p.get(key, 0.0)) <= 0:
                 errors.append(f'aktionen.vermessen.{key} muss > 0 sein')
         except Exception:
             errors.append(f'aktionen.vermessen.{key} muss eine Zahl sein')
+    if 'rapid_feed' in p:
+        try:
+            if float(p['rapid_feed']) <= 0:
+                errors.append('aktionen.vermessen.rapid_feed muss > 0 sein')
+        except Exception:
+            errors.append('aktionen.vermessen.rapid_feed muss eine Zahl sein')
     if 'a_such_schritt' in p:
         try:
             if float(p.get('a_such_schritt')) <= 0:
@@ -360,6 +366,109 @@ def validate_probe_config(cfg):
                 errors.append('aktionen.vermessen.a_such_ende muss groesser oder gleich a_such_start sein')
         except Exception:
             errors.append('aktionen.vermessen.a_such_start/a_such_ende muessen Zahlen sein')
+    helix_points = p.get('drall_messpunkte', [])
+    if helix_points:
+        if not isinstance(helix_points, list) or len(helix_points) < 2:
+            errors.append('aktionen.vermessen.drall_messpunkte braucht mindestens zwei Messpunkte')
+        else:
+            try:
+                x_values = [float(point['x']) for point in helix_points]
+                if abs(x_values[1] - x_values[0]) < 0.000001:
+                    errors.append('Die ersten zwei drall_messpunkte muessen unterschiedliche X-Werte haben')
+                for point in helix_points:
+                    float(point['z_probe_target'])
+            except (KeyError, TypeError, ValueError):
+                errors.append('Jeder drall_messpunkt braucht numerische Werte fuer x und z_probe_target')
+    result_parameters = p.get('ergebnis_parameter', {})
+    if result_parameters:
+        if not isinstance(result_parameters, dict):
+            errors.append('aktionen.vermessen.ergebnis_parameter muss ein Objekt sein')
+        else:
+            seen = {}
+            for name, value in result_parameters.items():
+                try:
+                    number = int(value)
+                    if float(value) != number or not 31 <= number <= 5000:
+                        raise ValueError
+                    if number in seen:
+                        errors.append(
+                            f'aktionen.vermessen.ergebnis_parameter.{name} verwendet #{number} bereits wie {seen[number]}'
+                        )
+                    seen[number] = name
+                except (TypeError, ValueError):
+                    errors.append(
+                        f'aktionen.vermessen.ergebnis_parameter.{name} muss eine ganze Zahl von 31 bis 5000 sein'
+                    )
+    errors.extend(validate_probe_positions_against_machine_limits(cfg))
+    return errors
+
+
+def validate_probe_positions_against_machine_limits(cfg):
+    """Validate configured probe targets that become variable G-code words."""
+    p = probe_config(cfg)
+    limits = machine_limits(cfg)
+    if not p or not limits:
+        return []
+
+    positions = []
+    for path, axis, value in (
+        ('aktionen.vermessen.front_x_probe_target', 'x', p.get('front_x_probe_target')),
+        ('aktionen.vermessen.diameter_z_probe_target', 'z', p.get('diameter_z_probe_target')),
+        ('aktionen.vermessen.safe_z', 'z', p.get('safe_z', cfg.get('maschine', {}).get('safe_z'))),
+    ):
+        if value is not None:
+            positions.append((path, axis, value))
+
+    a_start = p.get('a_such_start', 0.0)
+    positions.append(('aktionen.vermessen.a_such_start', 'a', a_start))
+    if 'a_such_ende' in p:
+        positions.append(('aktionen.vermessen.a_such_ende', 'a', p['a_such_ende']))
+    else:
+        try:
+            positions.append(
+                ('aktionen.vermessen.a_such_ende', 'a', float(a_start) + probe_a_search_span(cfg))
+            )
+        except (TypeError, ValueError):
+            pass
+
+    try:
+        positions.append(('aktionen.vermessen.tast_y_mitte', 'y', probe_y_center_for_helix(cfg)))
+    except (TypeError, ValueError):
+        pass
+
+    for idx, point in enumerate(p.get('drall_messpunkte', []), start=1):
+        if not isinstance(point, dict):
+            continue
+        positions.extend(
+            (
+                (f'aktionen.vermessen.drall_messpunkte[{idx}].x', 'x', point.get('x')),
+                (
+                    f'aktionen.vermessen.drall_messpunkte[{idx}].z_probe_target',
+                    'z',
+                    point.get('z_probe_target'),
+                ),
+                (
+                    f'aktionen.vermessen.drall_messpunkte[{idx}].z_sicher',
+                    'z',
+                    point.get('z_sicher', p.get('safe_z', cfg.get('maschine', {}).get('safe_z'))),
+                ),
+            )
+        )
+
+    errors = []
+    for path, axis, raw_value in positions:
+        if raw_value is None:
+            continue
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        min_key = f'{axis}_min'
+        max_key = f'{axis}_max'
+        if min_key in limits and value < float(limits[min_key]):
+            errors.append(f'{path}={value:.3f} unterschreitet maschine.limits.{min_key}')
+        if max_key in limits and value > float(limits[max_key]):
+            errors.append(f'{path}={value:.3f} ueberschreitet maschine.limits.{max_key}')
     return errors
 
 
@@ -430,11 +539,22 @@ def gcode_linuxcnc_probe_header(cfg, config_file=None):
     return lines
 
 
-def linuxcnc_probe_move(axis, target, feed, label):
+def linuxcnc_probe_success_guard(label, o_number):
+    """Abort a real LinuxCNC run when a non-erroring probe move found no contact."""
+    message = str(label).replace('(', '[').replace(')', ']')
+    return [
+        f'o{o_number} if [#<_task> AND [#5070 EQ 0]]',
+        f'  (abort,ToolGrinder: Kein Tastkontakt - {message})',
+        f'o{o_number} endif',
+    ]
+
+
+def linuxcnc_probe_move(axis, target, feed, label, o_number=100):
     axis = str(axis).upper()
     lines = []
     lines.append(f'({label})')
-    lines.append(f'G38.2 {axis}{float(target):.3f} F{float(feed):.3f}')
+    lines.append(f'G38.3 {axis}{float(target):.3f} F{float(feed):.3f}')
+    lines += linuxcnc_probe_success_guard(label, o_number)
     lines.append(f'(Probe result: X=#5061 Y=#5062 Z=#5063 A=#5064 success=#5070)')
     return lines
 
@@ -453,41 +573,135 @@ def probe_y_center_for_helix(cfg):
     raise ValueError(f'Ungueltige Drallrichtung fuer Vermessung: {direction}')
 
 
-def linuxcnc_probe_diameter_highest_point(cfg, target, feed, safe_z, retract):
+def linuxcnc_probe_highest_point(
+    cfg,
+    target,
+    feed,
+    safe_z,
+    retract,
+    variable_prefix='_tg',
+    while_number=110,
+    heading='Hoechste Schneidenstelle ueber A-Suche finden',
+):
     """Generate LinuxCNC O-code to find the highest cutter point by rotating A."""
     p = probe_config(cfg)
-    ball_radius = probe_ball_radius(cfg)
     y_center = probe_y_center_for_helix(cfg)
-    z_center = float(p.get('z_mitte', 0.0))
     a_start = float(p.get('a_such_start', 0.0))
     a_end = float(p.get('a_such_ende', a_start + probe_a_search_span(cfg)))
     a_step = float(p.get('a_such_schritt', 2.0))
+    a_var = f'#<{variable_prefix}_a>'
+    best_z_var = f'#<{variable_prefix}_best_z>'
+    best_a_var = f'#<{variable_prefix}_best_a>'
+    target_var = f'#<{variable_prefix}_probe_target_z>'
+    feed_var = f'#<{variable_prefix}_probe_feed>'
+    retract_var = f'#<{variable_prefix}_retract>'
+    best_if_number = while_number + 1
+    probe_guard_number = while_number + 2
     lines = []
-    lines.append('(Aussendurchmesser: hoechste Schneidenstelle ueber A-Suche finden)')
+    lines.append(f'({heading})')
     lines.append(f'(Drallrichtung: {p.get("drallrichtung", cfg.get("fraeser", {}).get("drallrichtung", "rechts"))})')
     lines.append(f'G0 Z{float(safe_z):.3f}')
     lines.append(f'G0 Y{y_center:.3f}   (Tastkugel-Mittelpunkt seitlich zur Schneide)')
-    lines.append(f'#<_tg_a> = {a_start:.3f}')
-    lines.append('#<_tg_best_z> = -999999.000')
-    lines.append(f'#<_tg_best_a> = {a_start:.3f}')
-    lines.append(f'#<_tg_probe_target_z> = {float(target):.3f}')
-    lines.append(f'#<_tg_probe_feed> = {float(feed):.3f}')
-    lines.append(f'#<_tg_retract> = {float(retract):.3f}')
-    lines.append(f'O100 WHILE [#<_tg_a> LE {a_end:.3f}]')
+    lines.append(f'{a_var} = {a_start:.3f}')
+    lines.append(f'{best_z_var} = -999999.000')
+    lines.append(f'{best_a_var} = {a_start:.3f}')
+    lines.append(f'{target_var} = {float(target):.3f}')
+    lines.append(f'{feed_var} = {float(feed):.3f}')
+    lines.append(f'{retract_var} = {float(retract):.3f}')
+    lines.append(f'o{while_number} while [{a_var} LE {a_end:.3f}]')
     lines.append(f'  G0 Z{float(safe_z):.3f}')
-    lines.append('  G0 A#<_tg_a>')
-    lines.append('  G38.2 Z#<_tg_probe_target_z> F#<_tg_probe_feed>')
-    lines.append('  O101 IF [#5063 GT #<_tg_best_z>]')
-    lines.append('    #<_tg_best_z> = #5063')
-    lines.append('    #<_tg_best_a> = #<_tg_a>')
-    lines.append('  O101 ENDIF')
-    lines.append('  G0 Z[#5063 + #<_tg_retract>]')
-    lines.append(f'  #<_tg_a> = [#<_tg_a> + {a_step:.3f}]')
-    lines.append('O100 ENDWHILE')
+    lines.append(f'  G0 A{a_var}')
+    lines.append(f'  G38.3 Z{target_var} F{feed_var}')
+    lines += [f'  {line}' for line in linuxcnc_probe_success_guard(heading, probe_guard_number)]
+    lines.append(f'  o{best_if_number} if [#5063 GT {best_z_var}]')
+    lines.append(f'    {best_z_var} = #5063')
+    lines.append(f'    {best_a_var} = {a_var}')
+    lines.append(f'  o{best_if_number} endif')
+    lines.append(f'  G0 Z[#5063 + {retract_var}]')
+    lines.append(f'  {a_var} = [{a_var} + {a_step:.3f}]')
+    lines.append(f'o{while_number} endwhile')
     lines.append(f'G0 Z{float(safe_z):.3f}')
-    lines.append('G0 A#<_tg_best_a>')
+    lines.append(f'G0 A{best_a_var}')
+    return lines
+
+
+def linuxcnc_probe_diameter_highest_point(cfg, target, feed, safe_z, retract):
+    """Find the highest flute and calculate the cutter diameter."""
+    p = probe_config(cfg)
+    ball_radius = probe_ball_radius(cfg)
+    z_center = float(p.get('z_mitte', 0.0))
+    lines = linuxcnc_probe_highest_point(
+        cfg,
+        target,
+        feed,
+        safe_z,
+        retract,
+        variable_prefix='_tg',
+        while_number=110,
+        heading='Aussendurchmesser: hoechste Schneidenstelle ueber A-Suche finden',
+    )
     lines.append(f'#<_tg_diameter> = [2 * ABS[[#<_tg_best_z> - {ball_radius:.3f}] - {z_center:.3f}]]')
     lines.append('(Ergebnis: beste A-Stellung=#<_tg_best_a>, Kugelzentrum Z=#<_tg_best_z>, Durchmesser=#<_tg_diameter>)')
+    lines.append('(DEBUG,ToolGrinder Durchmesser=#<_tg_diameter> mm; A=#<_tg_best_a> Grad)')
+    return lines
+
+
+def linuxcnc_probe_helix(cfg, points, feed, safe_z, retract):
+    """Measure the same flute at two X positions and calculate helix slope."""
+    pitch = probe_a_search_span(cfg)
+    lines = ['(Drallmessung: hoechste Schneidenlage an zwei X-Positionen suchen)']
+    for idx, point in enumerate(points[:2], start=1):
+        x = float(point['x'])
+        z = float(point.get('z_sicher', safe_z))
+        target = float(point['z_probe_target'])
+        prefix = f'_tg_helix_{idx}'
+        lines.append(f'(Drall Messpunkt {idx})')
+        lines.append(f'G0 Z{z:.3f}')
+        lines.append(f'G0 X{x:.3f}')
+        lines += linuxcnc_probe_highest_point(
+            cfg,
+            target,
+            feed,
+            z,
+            retract,
+            variable_prefix=prefix,
+            while_number=120 + ((idx - 1) * 10),
+            heading=f'Drall Messpunkt {idx}: hoechste Schneidenstelle suchen',
+        )
+        lines.append(f'#<{prefix}_x> = {x:.3f}')
+
+    lines.append('#<_tg_helix_delta_a> = [#<_tg_helix_2_best_a> - #<_tg_helix_1_best_a>]')
+    lines.append(f'o140 while [#<_tg_helix_delta_a> GT {pitch / 2.0:.6f}]')
+    lines.append(f'  #<_tg_helix_delta_a> = [#<_tg_helix_delta_a> - {pitch:.6f}]')
+    lines.append('o140 endwhile')
+    lines.append(f'o141 while [#<_tg_helix_delta_a> LT {-pitch / 2.0:.6f}]')
+    lines.append(f'  #<_tg_helix_delta_a> = [#<_tg_helix_delta_a> + {pitch:.6f}]')
+    lines.append('o141 endwhile')
+    lines.append(
+        '#<_tg_helix_slope> = [#<_tg_helix_delta_a> / '
+        '[#<_tg_helix_2_x> - #<_tg_helix_1_x>]]'
+    )
+    lines.append(
+        '(DEBUG,ToolGrinder Drall=#<_tg_helix_slope> Grad/mm; '
+        'A1=#<_tg_helix_1_best_a>; A2=#<_tg_helix_2_best_a>)'
+    )
+    return lines
+
+
+def linuxcnc_persist_probe_results(cfg, available_results):
+    """Copy runtime measurement results to configured persistent parameters."""
+    parameters = probe_config(cfg).get('ergebnis_parameter', {})
+    result_vars = {
+        'stirnkante_x': '#<_tg_front_x>',
+        'durchmesser': '#<_tg_diameter>',
+        'drall_grad_pro_mm': '#<_tg_helix_slope>',
+        'beste_a_position': '#<_tg_best_a>',
+    }
+    lines = []
+    for name, parameter in parameters.items():
+        if name in available_results and name in result_vars:
+            lines.append(f'#{int(parameter)} = {result_vars[name]}')
+            lines.append(f'(DEBUG,ToolGrinder Ergebnis {name}=#{int(parameter)})')
     return lines
 
 
@@ -506,29 +720,27 @@ def generiere_linuxcnc_vermess_gcode(cfg, config_file=None):
     safe_z = float(p.get('safe_z', cfg.get('maschine', {}).get('safe_z', 20.0)))
     lines = gcode_linuxcnc_probe_header(cfg, config_file)
     lines.append(f'(Tastkugel Durchmesser: {probe_ball_radius(cfg) * 2.0:.3f} mm)')
+    available_results = set()
 
     front_target = p.get('front_x_probe_target')
     if front_target is not None:
-        lines += linuxcnc_probe_move('X', front_target, feed, 'Stirnkante in X antasten')
+        lines += linuxcnc_probe_move('X', front_target, feed, 'Stirnkante in X antasten', o_number=100)
+        lines.append(f'#<_tg_front_x> = [#5061 - {probe_ball_radius(cfg):.3f}]')
+        lines.append('(DEBUG,ToolGrinder Stirnkante X=#<_tg_front_x> mm)')
+        available_results.add('stirnkante_x')
         lines.append(f'G0 X[#5061 + {retract:.3f}]')
 
     diameter_target = p.get('diameter_z_probe_target')
     if diameter_target is not None:
         lines += linuxcnc_probe_diameter_highest_point(cfg, diameter_target, feed, safe_z, retract)
+        available_results.update(('durchmesser', 'beste_a_position'))
 
     helix_points = p.get('drall_messpunkte', [])
     if helix_points:
-        lines.append('(Drallmessung: jede Messposition manuell/halbautomatisch auf dieselbe Schneide ausrichten)')
-        for idx, point in enumerate(helix_points, start=1):
-            x = float(point.get('x', 0.0))
-            z = float(point.get('z_sicher', safe_z))
-            lines.append(f'(Drall Messpunkt {idx})')
-            lines.append(f'G0 Z{z:.3f}')
-            lines.append(f'G0 X{x:.3f}')
-            if 'z_probe_target' in point:
-                lines += linuxcnc_probe_move('Z', point['z_probe_target'], feed, f'Drall Messpunkt {idx} Z antasten')
-                lines.append(f'G0 Z[#5063 + {retract:.3f}]')
+        lines += linuxcnc_probe_helix(cfg, helix_points, feed, safe_z, retract)
+        available_results.add('drall_grad_pro_mm')
 
+    lines += linuxcnc_persist_probe_results(cfg, available_results)
     lines.append(f'G0 Z{safe_z:.3f}')
     lines.append('M30')
     lines.append('%')

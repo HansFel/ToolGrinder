@@ -31,7 +31,10 @@ G-Code-Zeile ab.
 
 ## LinuxCNC Vermessen
 
-Der Modus `measure` erzeugt einen LinuxCNC-Messablauf mit `G38.2`. LinuxCNC
+Der Modus `measure` erzeugt einen LinuxCNC-Messablauf mit `G38.3`. Nach jedem
+Tastversuch wird `#5070` geprueft; bei fehlendem Kontakt bricht das Programm mit
+einer verstaendlichen Meldung ab. Die Pruefung wird ueber `#<_task>` waehrend
+der grafischen Vorschau unterdrueckt. LinuxCNC
 legt erfolgreiche Tastpunkte in `#5061` bis `#5069` ab; `#5070` zeigt den
 Tasterfolg. Die Software nutzt diese Konvention als Grundlage fuer:
 
@@ -42,7 +45,30 @@ Tasterfolg. Die Software nutzt diese Konvention als Grundlage fuer:
   `360 / schneidenanzahl`, also 360 Grad bei Einschneider, 180 Grad bei
   Zweischneider und 120 Grad bei Dreischneider. Bei rechtsdrehendem Fraeser
   faehrt der Mittelpunkt der Tastkugel in Y auf den Tastkugelradius.
-- Drallberechnung aus zwei Messpunkten: `(A2 - A1) / (X2 - X1)`
+- automatische Drallberechnung aus zwei X-Messpositionen. An beiden Positionen
+  wird die hoechste Schneidenlage gesucht. Die Winkeldifferenz wird auf die
+  naechste Schneidenteilung normalisiert und als
+  `(A2 - A1) / (X2 - X1)` berechnet.
+
+Messwerte werden als `DEBUG`-Meldungen ausgegeben. Optional kopiert der Ablauf
+sie zusaetzlich in konfigurierbare LinuxCNC-Benutzerparameter. Parameter im
+Bereich `31` bis `5000` werden von LinuxCNC ueber die Parameterdatei persistent
+gespeichert:
+
+```json
+{
+  "aktionen": {
+    "vermessen": {
+      "ergebnis_parameter": {
+        "stirnkante_x": 4901,
+        "durchmesser": 4902,
+        "drall_grad_pro_mm": 4903,
+        "beste_a_position": 4904
+      }
+    }
+  }
+}
+```
 
 Beispiel:
 

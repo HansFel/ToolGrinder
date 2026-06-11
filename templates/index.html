@@ -12,18 +12,25 @@
             <span class="brand-mark" aria-hidden="true"></span>
             <div>
                 <h1>ToolGrinder CNC</h1>
-                <p>4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt</p>
+                <p data-i18n="subtitle">4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt</p>
             </div>
         </div>
         <div class="top-actions">
-            <div class="status" id="status">Bereit</div>
-            <button id="generateTop" type="button" class="primary compact">G-Code erzeugen</button>
+            <label class="language-control" for="languageSelect">
+                <span data-i18n="language">Sprache</span>
+                <select id="languageSelect" aria-label="Sprache" data-i18n-aria-label="language">
+                    <option value="de">Deutsch</option>
+                    <option value="en">English</option>
+                </select>
+            </label>
+            <div class="status" id="status" data-status-key="ready">Bereit</div>
+            <button id="generateTop" type="button" class="primary compact" data-i18n="generate">G-Code erzeugen</button>
         </div>
     </header>
 
     <main class="layout">
         <section class="panel machine-panel">
-            <div class="machine-visual" aria-label="Schematische Schleifsituation mit Drallfräser und Topfscheibe">
+            <div class="machine-visual" aria-label="Schematische Schleifsituation mit Drallfräser und Topfscheibe" data-i18n-aria-label="machineVisual">
                 <svg viewBox="0 0 760 410" role="img">
                     <defs>
                         <linearGradient id="metal" x1="0" x2="1">
@@ -79,22 +86,22 @@
                     </g>
 
                     <g class="labels">
-                        <text x="138" y="88">A-Achse dreht um X</text>
-                        <text x="518" y="48">Topfscheibe / Z-Spindel</text>
+                        <text x="138" y="88" data-i18n="axisLabel">A-Achse dreht um X</text>
+                        <text x="518" y="48" data-i18n="wheelLabel">Topfscheibe / Z-Spindel</text>
                         <text x="266" y="251">Z0</text>
-                        <text x="510" y="333">Schleifkontakt</text>
+                        <text x="510" y="333" data-i18n="contactLabel">Schleifkontakt</text>
                     </g>
                 </svg>
             </div>
 
             <div class="machine-readout">
-                <div><span>Fräser</span><strong id="readoutTool">-</strong></div>
-                <div><span>Schneiden</span><strong id="readoutFlutes">-</strong></div>
-                <div><span>Ziel Ø</span><strong id="readoutTarget">-</strong></div>
+                <div><span data-i18n="cutter">Fräser</span><strong id="readoutTool">-</strong></div>
+                <div><span data-i18n="flutes">Schneiden</span><strong id="readoutFlutes">-</strong></div>
+                <div><span data-i18n="targetDiameter">Ziel Ø</span><strong id="readoutTarget">-</strong></div>
             </div>
 
             <div class="field">
-                <label for="templateSelect">Vorlage</label>
+                <label for="templateSelect" data-i18n="template">Vorlage</label>
                 <select id="templateSelect">
                     {% for tpl in templates %}
                     <option value="{{ tpl.name }}">{{ tpl.label }}</option>
@@ -103,8 +110,8 @@
             </div>
 
             <div class="field">
-                <label>Modus</label>
-                <div class="segmented" role="group" aria-label="Modus">
+                <label data-i18n="mode">Modus</label>
+                <div class="segmented" role="group" aria-label="Modus" data-i18n-aria-label="mode">
                     <input type="radio" id="modeBoth" name="mode" value="both" checked>
                     <label for="modeBoth">Edge + Front</label>
                     <input type="radio" id="modeEdge" name="mode" value="edge">
@@ -112,66 +119,66 @@
                     <input type="radio" id="modeFront" name="mode" value="front">
                     <label for="modeFront">Front</label>
                     <input type="radio" id="modeMeasure" name="mode" value="measure">
-                    <label for="modeMeasure">Vermessen</label>
+                    <label for="modeMeasure" data-i18n="measure">Vermessen</label>
                 </div>
             </div>
 
             <div class="quick-grid">
-                <label>Fräser Ø
+                <label><span data-i18n="cutterDiameter">Fräser Ø</span>
                     <input id="toolDiameter" type="number" step="0.01">
                 </label>
-                <label>Schneiden
+                <label><span data-i18n="flutes">Schneiden</span>
                     <input id="flutes" type="number" step="1">
                 </label>
-                <label>Ziel Ø
+                <label><span data-i18n="targetDiameter">Ziel Ø</span>
                     <input id="targetDiameter" type="number" step="0.01">
                 </label>
-                <label>Front X Ende
+                <label><span data-i18n="frontXEnd">Front X Ende</span>
                     <input id="frontXEnd" type="number" step="0.01">
                 </label>
             </div>
 
             <div class="measure-group" id="measureGroup">
-                <div class="limit-title">Werkzeug antasten</div>
+                <div class="limit-title" data-i18n="probeTool">Werkzeug antasten</div>
                 <div class="limit-grid">
-                    <label>Drallrichtung
+                    <label><span data-i18n="helixDirection">Drallrichtung</span>
                         <select id="probeHelixDirection">
-                            <option value="rechts">Rechts</option>
-                            <option value="links">Links</option>
+                            <option value="rechts" data-i18n="right">Rechts</option>
+                            <option value="links" data-i18n="left">Links</option>
                         </select>
                     </label>
-                    <label>Tastkugel Ø
+                    <label><span data-i18n="probeBallDiameter">Tastkugel Ø</span>
                         <input id="probeBallDiameter" type="number" step="0.01">
                     </label>
-                    <label>Tastvorschub
+                    <label><span data-i18n="probeFeed">Tastvorschub</span>
                         <input id="probeFeed" type="number" step="1">
                     </label>
-                    <label>Sicheres Z
+                    <label><span data-i18n="safeZ">Sicheres Z</span>
                         <input id="probeSafeZ" type="number" step="0.01">
                     </label>
-                    <label>Rückzug
+                    <label><span data-i18n="retract">Rückzug</span>
                         <input id="probeRetract" type="number" step="0.01">
                     </label>
-                    <label>Stirnkante X Ziel
+                    <label><span data-i18n="frontProbeTarget">Stirnkante X Ziel</span>
                         <input id="probeFrontXTarget" type="number" step="0.01">
                     </label>
-                    <label>Durchmesser Z Ziel
+                    <label><span data-i18n="diameterProbeTarget">Durchmesser Z Ziel</span>
                         <input id="probeDiameterZTarget" type="number" step="0.01">
                     </label>
-                    <label>A Start
+                    <label><span data-i18n="aStart">A Start</span>
                         <input id="probeAStart" type="number" step="0.1">
                     </label>
-                    <label>A Ende
+                    <label><span data-i18n="aEnd">A Ende</span>
                         <input id="probeAEnd" type="number" step="0.1">
                     </label>
-                    <label>A Schritt
+                    <label><span data-i18n="aStep">A Schritt</span>
                         <input id="probeAStep" type="number" step="0.1">
                     </label>
                 </div>
             </div>
 
             <div class="limit-group">
-                <div class="limit-title">Maschinenlimits</div>
+                <div class="limit-title" data-i18n="machineLimits">Maschinenlimits</div>
                 <div class="limit-grid">
                     <label>X min
                         <input id="limitXMin" type="number" step="0.01">
@@ -201,8 +208,8 @@
             </div>
 
             <div class="actions">
-                <button id="applyQuick" type="button">Werte übernehmen</button>
-                <button id="generate" type="button" class="primary">G-Code erzeugen</button>
+                <button id="applyQuick" type="button" data-i18n="applyValues">Werte übernehmen</button>
+                <button id="generate" type="button" class="primary" data-i18n="generate">G-Code erzeugen</button>
             </div>
 
             <div class="output-list" id="outputs"></div>
@@ -210,18 +217,18 @@
 
         <section class="panel editor-panel">
             <div class="panel-title">
-                <span>Konfiguration JSON</span>
-                <button id="formatJson" type="button">Formatieren</button>
+                <span data-i18n="jsonConfig">Konfiguration JSON</span>
+                <button id="formatJson" type="button" data-i18n="format">Formatieren</button>
             </div>
             <textarea id="configEditor" spellcheck="false">{{ initial_config }}</textarea>
         </section>
 
         <section class="panel preview-panel">
             <div class="panel-title">
-                <span>G-Code Vorschau</span>
+                <span data-i18n="gcodePreview">G-Code Vorschau</span>
                 <span id="previewName"></span>
             </div>
-            <pre id="preview">(Noch kein G-Code erzeugt)</pre>
+            <pre id="preview" data-empty-preview="true">(Noch kein G-Code erzeugt)</pre>
         </section>
     </main>
 

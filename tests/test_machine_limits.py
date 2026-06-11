@@ -20,6 +20,11 @@ class TestMachineLimits(unittest.TestCase):
 
         self.assertEqual(axes, {'X': 12.5, 'Z': -0.2, 'A': 90.0})
 
+    def test_parse_gcode_axes_keeps_words_after_parenthesis_comment(self):
+        axes = parse_gcode_axes('G0 (Zwischenkommentar) X5.0 Z10.0')
+
+        self.assertEqual(axes, {'X': 5.0, 'Z': 10.0})
+
     def test_missing_limits_are_allowed(self):
         cfg = json.loads(json.dumps(self.template))
         del cfg['maschine']['limits']

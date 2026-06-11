@@ -7,6 +7,106 @@ const readoutToolEl = document.getElementById("readoutTool");
 const readoutFlutesEl = document.getElementById("readoutFlutes");
 const readoutTargetEl = document.getElementById("readoutTarget");
 const measureGroupEl = document.getElementById("measureGroup");
+const languageSelectEl = document.getElementById("languageSelect");
+const translations = {
+    de: {
+        language: "Sprache",
+        subtitle: "4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt",
+        generate: "G-Code erzeugen",
+        machineVisual: "Schematische Schleifsituation mit Drallfräser und Topfscheibe",
+        axisLabel: "A-Achse dreht um X",
+        wheelLabel: "Topfscheibe / Z-Spindel",
+        contactLabel: "Schleifkontakt",
+        cutter: "Fräser",
+        flutes: "Schneiden",
+        targetDiameter: "Ziel Ø",
+        template: "Vorlage",
+        mode: "Modus",
+        measure: "Vermessen",
+        cutterDiameter: "Fräser Ø",
+        frontXEnd: "Front X Ende",
+        probeTool: "Werkzeug antasten",
+        helixDirection: "Drallrichtung",
+        right: "Rechts",
+        left: "Links",
+        probeBallDiameter: "Tastkugel Ø",
+        probeFeed: "Tastvorschub",
+        safeZ: "Sicheres Z",
+        retract: "Rückzug",
+        frontProbeTarget: "Stirnkante X Ziel",
+        diameterProbeTarget: "Durchmesser Z Ziel",
+        aStart: "A Start",
+        aEnd: "A Ende",
+        aStep: "A Schritt",
+        machineLimits: "Maschinenlimits",
+        applyValues: "Werte übernehmen",
+        jsonConfig: "Konfiguration JSON",
+        format: "Formatieren",
+        gcodePreview: "G-Code Vorschau",
+        emptyPreview: "(Noch kein G-Code erzeugt)",
+        ready: "Bereit",
+        loadingTemplate: "Lade Vorlage",
+        generating: "Generiere",
+        error: "Fehler",
+        finished: "Fertig",
+        applied: "Übernommen",
+        formatted: "Formatiert",
+        templateLoadError: "Vorlage konnte nicht geladen werden.",
+        invalidJson: "JSON ist ungültig: ",
+        unknownError: "Unbekannter Fehler",
+        bytes: "Bytes",
+        download: "Download",
+    },
+    en: {
+        language: "Language",
+        subtitle: "4-axis XYZA tool grinding · Z0 at the tool rotation center",
+        generate: "Generate G-code",
+        machineVisual: "Schematic grinding setup with helical cutter and cup wheel",
+        axisLabel: "A axis rotates around X",
+        wheelLabel: "Cup wheel / Z spindle",
+        contactLabel: "Grinding contact",
+        cutter: "Cutter",
+        flutes: "Flutes",
+        targetDiameter: "Target Ø",
+        template: "Template",
+        mode: "Mode",
+        measure: "Measure",
+        cutterDiameter: "Cutter Ø",
+        frontXEnd: "Front X end",
+        probeTool: "Probe tool",
+        helixDirection: "Helix direction",
+        right: "Right",
+        left: "Left",
+        probeBallDiameter: "Probe ball Ø",
+        probeFeed: "Probe feed",
+        safeZ: "Safe Z",
+        retract: "Retract",
+        frontProbeTarget: "Front edge X target",
+        diameterProbeTarget: "Diameter Z target",
+        aStart: "A start",
+        aEnd: "A end",
+        aStep: "A step",
+        machineLimits: "Machine limits",
+        applyValues: "Apply values",
+        jsonConfig: "JSON configuration",
+        format: "Format",
+        gcodePreview: "G-code preview",
+        emptyPreview: "(No G-code generated yet)",
+        ready: "Ready",
+        loadingTemplate: "Loading template",
+        generating: "Generating",
+        error: "Error",
+        finished: "Done",
+        applied: "Applied",
+        formatted: "Formatted",
+        templateLoadError: "Template could not be loaded.",
+        invalidJson: "JSON is invalid: ",
+        unknownError: "Unknown error",
+        bytes: "bytes",
+        download: "Download",
+    },
+};
+let currentLanguage = localStorage.getItem("toolgrinder-language") === "en" ? "en" : "de";
 const limitMappings = [
     ["limitXMin", "x_min"],
     ["limitXMax", "x_max"],
@@ -43,8 +143,31 @@ const defaultProbeConfig = {
     ausgabe_datei: "fraeser_vermessen.ngc",
 };
 
-function setStatus(text) {
-    statusEl.textContent = text;
+function t(key) {
+    return translations[currentLanguage][key] || translations.de[key] || key;
+}
+
+function setStatus(key) {
+    statusEl.dataset.statusKey = key;
+    statusEl.textContent = t(key);
+}
+
+function applyLanguage(language) {
+    currentLanguage = language === "en" ? "en" : "de";
+    localStorage.setItem("toolgrinder-language", currentLanguage);
+    document.documentElement.lang = currentLanguage;
+    languageSelectEl.value = currentLanguage;
+    document.querySelectorAll("[data-i18n]").forEach(element => {
+        element.textContent = t(element.dataset.i18n);
+    });
+    document.querySelectorAll("[data-i18n-aria-label]").forEach(element => {
+        element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
+    });
+    setStatus(statusEl.dataset.statusKey || "ready");
+    if (previewEl.dataset.emptyPreview === "true") {
+        previewEl.textContent = t("emptyPreview");
+    }
+    fillQuickFields(readConfig());
 }
 
 function readConfig() {
@@ -127,29 +250,31 @@ function applyQuickFields() {
 }
 
 async function loadTemplate(name) {
-    setStatus("Lade Vorlage");
+    setStatus("loadingTemplate");
     const response = await fetch(`/api/templates/${encodeURIComponent(name)}`);
-    if (!response.ok) throw new Error("Vorlage konnte nicht geladen werden.");
+    if (!response.ok) throw new Error(t("templateLoadError"));
     writeConfig(await response.json());
     outputsEl.innerHTML = "";
-    previewEl.textContent = "(Noch kein G-Code erzeugt)";
+    previewEl.dataset.emptyPreview = "true";
+    previewEl.textContent = t("emptyPreview");
     previewNameEl.textContent = "";
-    setStatus("Bereit");
+    setStatus("ready");
 }
 
 async function generate() {
     outputsEl.innerHTML = "";
+    previewEl.dataset.emptyPreview = "false";
     previewEl.textContent = "";
     previewNameEl.textContent = "";
-    setStatus("Generiere");
+    setStatus("generating");
 
     let cfg;
     try {
         applyQuickFields();
         cfg = readConfig();
     } catch (error) {
-        showErrors(["JSON ist ungültig: " + error.message]);
-        setStatus("Fehler");
+        showErrors([t("invalidJson") + error.message]);
+        setStatus("error");
         return;
     }
 
@@ -161,15 +286,15 @@ async function generate() {
     });
     const result = await response.json();
     if (!response.ok || !result.ok) {
-        showErrors(result.errors || ["Unbekannter Fehler"]);
-        setStatus("Fehler");
+        showErrors(result.errors || [t("unknownError")]);
+        setStatus("error");
         return;
     }
 
     for (const file of result.files) {
         const item = document.createElement("div");
         item.className = "output-item";
-        item.innerHTML = `<strong>${file.name}</strong><div>${file.bytes} Bytes</div><a href="${file.download_url}">Download</a>`;
+        item.innerHTML = `<strong>${file.name}</strong><div>${file.bytes} <span data-i18n="bytes">${t("bytes")}</span></div><a href="${file.download_url}" data-i18n="download">${t("download")}</a>`;
         item.addEventListener("click", () => {
             previewNameEl.textContent = file.name;
             previewEl.textContent = file.preview;
@@ -180,14 +305,14 @@ async function generate() {
         previewNameEl.textContent = result.files[0].name;
         previewEl.textContent = result.files[0].preview;
     }
-    setStatus("Fertig");
+    setStatus("finished");
 }
 
 function showErrors(errors) {
     outputsEl.innerHTML = "";
     const item = document.createElement("div");
     item.className = "output-item error";
-    item.innerHTML = `<strong>Fehler</strong>${errors.map(e => `<div>${escapeHtml(e)}</div>`).join("")}`;
+    item.innerHTML = `<strong data-i18n="error">${t("error")}</strong>${errors.map(e => `<div>${escapeHtml(e)}</div>`).join("")}`;
     outputsEl.appendChild(item);
 }
 
@@ -204,8 +329,12 @@ function escapeHtml(value) {
 document.getElementById("templateSelect").addEventListener("change", event => {
     loadTemplate(event.target.value).catch(error => {
         showErrors([error.message]);
-        setStatus("Fehler");
+        setStatus("error");
     });
+});
+
+languageSelectEl.addEventListener("change", event => {
+    applyLanguage(event.target.value);
 });
 
 document.querySelectorAll("input[name=mode]").forEach(input => {
@@ -220,27 +349,27 @@ document.getElementById("flutes").addEventListener("input", () => {
 document.getElementById("applyQuick").addEventListener("click", () => {
     try {
         applyQuickFields();
-        setStatus("Übernommen");
+        setStatus("applied");
     } catch (error) {
-        showErrors(["JSON ist ungültig: " + error.message]);
-        setStatus("Fehler");
+        showErrors([t("invalidJson") + error.message]);
+        setStatus("error");
     }
 });
 
 document.getElementById("formatJson").addEventListener("click", () => {
     try {
         writeConfig(readConfig());
-        setStatus("Formatiert");
+        setStatus("formatted");
     } catch (error) {
-        showErrors(["JSON ist ungültig: " + error.message]);
-        setStatus("Fehler");
+        showErrors([t("invalidJson") + error.message]);
+        setStatus("error");
     }
 });
 
 document.getElementById("generate").addEventListener("click", () => {
     generate().catch(error => {
         showErrors([error.message]);
-        setStatus("Fehler");
+        setStatus("error");
     });
 });
 
@@ -268,7 +397,7 @@ editor.addEventListener("input", () => {
 function formatNumber(value) {
     const number = Number(value);
     if (!Number.isFinite(number)) return value;
-    return number.toLocaleString("de-DE", {maximumFractionDigits: 2});
+    return number.toLocaleString(currentLanguage === "en" ? "en-US" : "de-DE", {maximumFractionDigits: 2});
 }
 
 function computeAEndFromFlutes(flutes, start = 0) {
@@ -283,5 +412,5 @@ function updateModePanels() {
     measureGroupEl.hidden = mode !== "measure";
 }
 
-fillQuickFields(window.initialConfig);
+applyLanguage(currentLanguage);
 updateModePanels();
