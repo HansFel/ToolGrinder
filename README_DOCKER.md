@@ -12,7 +12,7 @@ wsl -e sh -lc "cd /mnt/c/Users/HTFel/OneDrive/CNCProgramms/Grinder && docker com
 Danach im Browser:
 
 ```text
-http://localhost:8088
+http://localhost:18088
 ```
 
 ## Stop
@@ -24,7 +24,7 @@ wsl -e sh -lc "cd /mnt/c/Users/HTFel/OneDrive/CNCProgramms/Grinder && docker com
 ## Test
 
 ```powershell
-curl.exe http://localhost:8088/health
+curl.exe http://localhost:18088/health
 ```
 
 Die erzeugten G-Code-Dateien liegen im Docker-Volume `grinder_grinder_data` und sind ueber die Download-Links in der Webapp abrufbar.
