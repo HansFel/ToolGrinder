@@ -11,8 +11,8 @@
         <div class="brand">
             <span class="brand-mark" aria-hidden="true"></span>
             <div>
-                <h1>ToolGrinder CNC</h1>
-                <p data-i18n="subtitle">4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt</p>
+                <h1>ToolGrinder <span>CNC</span></h1>
+                <p data-i18n="subtitle">Werkzeugdaten, Strategien und sichere G-Code-Erzeugung</p>
             </div>
         </div>
         <div class="top-actions">
@@ -24,217 +24,409 @@
                 </select>
             </label>
             <div class="status" id="status" data-status-key="ready">Bereit</div>
-            <button id="generateTop" type="button" class="primary compact" data-i18n="generate">G-Code erzeugen</button>
         </div>
     </header>
 
-    <main class="layout">
-        <section class="panel machine-panel">
-            <div class="machine-visual" aria-label="Schematische Schleifsituation mit Drallfräser und Topfscheibe" data-i18n-aria-label="machineVisual">
-                <svg viewBox="0 0 760 410" role="img">
-                    <defs>
-                        <linearGradient id="metal" x1="0" x2="1">
-                            <stop offset="0" stop-color="#d9e2e7"/>
-                            <stop offset=".22" stop-color="#ffffff"/>
-                            <stop offset=".5" stop-color="#9eaeb7"/>
-                            <stop offset=".78" stop-color="#eef3f5"/>
-                            <stop offset="1" stop-color="#8799a4"/>
-                        </linearGradient>
-                        <linearGradient id="wheelFace" x1="0" x2="1">
-                            <stop offset="0" stop-color="#7a858a"/>
-                            <stop offset=".45" stop-color="#c6cdd1"/>
-                            <stop offset="1" stop-color="#525d62"/>
-                        </linearGradient>
-                        <linearGradient id="flute" x1="0" x2="1">
-                            <stop offset="0" stop-color="#0d766c"/>
-                            <stop offset=".5" stop-color="#35a79b"/>
-                            <stop offset="1" stop-color="#0d514c"/>
-                        </linearGradient>
-                        <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-                            <feDropShadow dx="0" dy="9" stdDeviation="8" flood-color="#10202a" flood-opacity=".2"/>
-                        </filter>
-                    </defs>
+    <main class="app-shell">
+        <nav class="sidebar" aria-label="Hauptnavigation" data-i18n-aria-label="mainNavigation">
+            <button class="nav-item" type="button" data-view="dashboard">
+                <span class="nav-icon">⌁</span><span data-i18n="dashboard">Übersicht</span>
+            </button>
+            <button class="nav-item active" type="button" data-view="templates">
+                <span class="nav-icon">▥</span><span data-i18n="templates">Fräser-Vorlagen</span>
+            </button>
+            <button class="nav-item" type="button" data-view="cutters">
+                <span class="nav-icon">⌇</span><span data-i18n="cutters">Geschärfte Fräser</span>
+            </button>
+            <button class="nav-item" type="button" data-view="wheels">
+                <span class="nav-icon">◎</span><span data-i18n="grindingTools">Schleifwerkzeuge</span>
+            </button>
+            <button class="nav-item" type="button" data-view="strategies">
+                <span class="nav-icon">⌁</span><span data-i18n="strategies">Strategien</span>
+            </button>
+            <button class="nav-item" type="button" data-view="jobs">
+                <span class="nav-icon">▤</span><span data-i18n="jobs">Aufträge</span>
+            </button>
+            <div class="nav-spacer"></div>
+            <button class="nav-item" type="button" data-view="settings">
+                <span class="nav-icon">⚙</span><span data-i18n="settings">Einstellungen</span>
+            </button>
+        </nav>
 
-                    <rect x="36" y="302" width="690" height="42" rx="4" fill="#cfd9df"/>
-                    <rect x="72" y="336" width="614" height="20" rx="3" fill="#8d9ba5"/>
-                    <path d="M112 308 L204 214 L632 214 L690 308 Z" fill="#e7edf1"/>
-                    <path d="M205 214 L632 214" stroke="#8998a3" stroke-width="5"/>
-
-                    <g class="axis-lines">
-                        <path d="M148 276 H650"/>
-                        <path d="M250 343 V96"/>
-                        <path d="M250 276 C305 224 365 224 420 276"/>
-                    </g>
-
-                    <g class="tool" filter="url(#softShadow)">
-                        <rect x="154" y="237" width="340" height="52" rx="26" fill="url(#metal)"/>
-                        <rect x="104" y="231" width="88" height="64" rx="8" fill="#788894"/>
-                        <circle cx="250" cy="263" r="6" fill="#17202a"/>
-                        <path class="flute flute-a" d="M190 242 C245 210 313 304 368 271 C408 248 430 238 490 243 L490 258 C429 252 406 268 367 288 C310 326 244 230 190 260 Z" fill="url(#flute)"/>
-                        <path class="flute flute-b" d="M195 271 C250 238 316 329 371 297 C414 272 438 265 492 272 L492 287 C434 281 413 296 372 315 C314 351 251 259 195 289 Z" fill="#173744" opacity=".88"/>
-                        <path class="edge-line" d="M198 241 C250 219 314 302 370 270 C410 248 438 239 490 244"/>
-                        <path class="edge-line" d="M197 271 C251 247 317 329 373 298 C416 276 438 266 491 273"/>
-                    </g>
-
-                    <g class="wheel" filter="url(#softShadow)">
-                        <rect x="592" y="72" width="58" height="190" rx="8" fill="#56646b"/>
-                        <ellipse cx="590" cy="167" rx="56" ry="96" fill="url(#wheelFace)"/>
-                        <ellipse cx="590" cy="167" rx="29" ry="53" fill="#e9eef1"/>
-                        <ellipse cx="590" cy="167" rx="11" ry="22" fill="#78848b"/>
-                        <path d="M535 118 C557 144 556 192 535 218" fill="none" stroke="#edf3f5" stroke-width="7" opacity=".75"/>
-                        <path class="spark" d="M526 248 L492 270 M529 235 L486 244 M528 260 L506 294"/>
-                    </g>
-
-                    <g class="labels">
-                        <text x="138" y="88" data-i18n="axisLabel">A-Achse dreht um X</text>
-                        <text x="518" y="48" data-i18n="wheelLabel">Topfscheibe / Z-Spindel</text>
-                        <text x="266" y="251">Z0</text>
-                        <text x="510" y="333" data-i18n="contactLabel">Schleifkontakt</text>
-                    </g>
-                </svg>
-            </div>
-
-            <div class="machine-readout">
-                <div><span data-i18n="cutter">Fräser</span><strong id="readoutTool">-</strong></div>
-                <div><span data-i18n="flutes">Schneiden</span><strong id="readoutFlutes">-</strong></div>
-                <div><span data-i18n="targetDiameter">Ziel Ø</span><strong id="readoutTarget">-</strong></div>
-            </div>
-
-            <div class="field">
-                <label for="templateSelect" data-i18n="template">Vorlage</label>
-                <select id="templateSelect">
-                    {% for tpl in templates %}
-                    <option value="{{ tpl.name }}">{{ tpl.label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="field">
-                <label data-i18n="mode">Modus</label>
-                <div class="segmented" role="group" aria-label="Modus" data-i18n-aria-label="mode">
-                    <input type="radio" id="modeBoth" name="mode" value="both" checked>
-                    <label for="modeBoth">Edge + Front</label>
-                    <input type="radio" id="modeEdge" name="mode" value="edge">
-                    <label for="modeEdge">Edge</label>
-                    <input type="radio" id="modeFront" name="mode" value="front">
-                    <label for="modeFront">Front</label>
-                    <input type="radio" id="modeMeasure" name="mode" value="measure">
-                    <label for="modeMeasure" data-i18n="measure">Vermessen</label>
+        <section class="library-pane">
+            <div class="pane-heading">
+                <div>
+                    <h2 data-i18n="templates">Fräser-Vorlagen</h2>
+                    <p data-i18n="templateHint">Dynamische Stammdaten aus der Datenbank</p>
                 </div>
+                <button id="newTemplate" class="icon-button" type="button" title="Neue Vorlage">+</button>
             </div>
-
-            <div class="quick-grid">
-                <label><span data-i18n="cutterDiameter">Fräser Ø</span>
-                    <input id="toolDiameter" type="number" step="0.01">
-                </label>
-                <label><span data-i18n="flutes">Schneiden</span>
-                    <input id="flutes" type="number" step="1">
-                </label>
-                <label><span data-i18n="targetDiameter">Ziel Ø</span>
-                    <input id="targetDiameter" type="number" step="0.01">
-                </label>
-                <label><span data-i18n="frontXEnd">Front X Ende</span>
-                    <input id="frontXEnd" type="number" step="0.01">
-                </label>
+            <label class="search-box">
+                <span class="search-icon">⌕</span>
+                <input id="templateSearch" type="search" data-i18n-placeholder="searchTemplates"
+                       placeholder="Name, Typ oder Material suchen">
+            </label>
+            <div id="templateList" class="entity-list"></div>
+            <div class="library-summary">
+                <span data-i18n="database">Datenbank</span>
+                <strong id="templateCount">0</strong>
+                <span data-i18n="activeTemplates">aktive Vorlagen</span>
             </div>
-
-            <div class="measure-group" id="measureGroup">
-                <div class="limit-title" data-i18n="probeTool">Werkzeug antasten</div>
-                <div class="limit-grid">
-                    <label><span data-i18n="helixDirection">Drallrichtung</span>
-                        <select id="probeHelixDirection">
-                            <option value="rechts" data-i18n="right">Rechts</option>
-                            <option value="links" data-i18n="left">Links</option>
-                        </select>
-                    </label>
-                    <label><span data-i18n="probeBallDiameter">Tastkugel Ø</span>
-                        <input id="probeBallDiameter" type="number" step="0.01">
-                    </label>
-                    <label><span data-i18n="probeFeed">Tastvorschub</span>
-                        <input id="probeFeed" type="number" step="1">
-                    </label>
-                    <label><span data-i18n="safeZ">Sicheres Z</span>
-                        <input id="probeSafeZ" type="number" step="0.01">
-                    </label>
-                    <label><span data-i18n="retract">Rückzug</span>
-                        <input id="probeRetract" type="number" step="0.01">
-                    </label>
-                    <label><span data-i18n="frontProbeTarget">Stirnkante X Ziel</span>
-                        <input id="probeFrontXTarget" type="number" step="0.01">
-                    </label>
-                    <label><span data-i18n="diameterProbeTarget">Durchmesser Z Ziel</span>
-                        <input id="probeDiameterZTarget" type="number" step="0.01">
-                    </label>
-                    <label><span data-i18n="aStart">A Start</span>
-                        <input id="probeAStart" type="number" step="0.1">
-                    </label>
-                    <label><span data-i18n="aEnd">A Ende</span>
-                        <input id="probeAEnd" type="number" step="0.1">
-                    </label>
-                    <label><span data-i18n="aStep">A Schritt</span>
-                        <input id="probeAStep" type="number" step="0.1">
-                    </label>
-                </div>
-            </div>
-
-            <div class="limit-group">
-                <div class="limit-title" data-i18n="machineLimits">Maschinenlimits</div>
-                <div class="limit-grid">
-                    <label>X min
-                        <input id="limitXMin" type="number" step="0.01">
-                    </label>
-                    <label>X max
-                        <input id="limitXMax" type="number" step="0.01">
-                    </label>
-                    <label>Y min
-                        <input id="limitYMin" type="number" step="0.01">
-                    </label>
-                    <label>Y max
-                        <input id="limitYMax" type="number" step="0.01">
-                    </label>
-                    <label>Z min
-                        <input id="limitZMin" type="number" step="0.01">
-                    </label>
-                    <label>Z max
-                        <input id="limitZMax" type="number" step="0.01">
-                    </label>
-                    <label>A min
-                        <input id="limitAMin" type="number" step="0.01">
-                    </label>
-                    <label>A max
-                        <input id="limitAMax" type="number" step="0.01">
-                    </label>
-                </div>
-            </div>
-
-            <div class="actions">
-                <button id="applyQuick" type="button" data-i18n="applyValues">Werte übernehmen</button>
-                <button id="generate" type="button" class="primary" data-i18n="generate">G-Code erzeugen</button>
-            </div>
-
-            <div class="output-list" id="outputs"></div>
         </section>
 
-        <section class="panel editor-panel">
-            <div class="panel-title">
-                <span data-i18n="jsonConfig">Konfiguration JSON</span>
-                <button id="formatJson" type="button" data-i18n="format">Formatieren</button>
+        <section class="workspace">
+            <div class="workspace-header">
+                <div>
+                    <div class="eyeline" data-i18n="selectedTemplate">Ausgewählte Vorlage</div>
+                    <h2 id="templateTitle">-</h2>
+                    <div class="meta-line" id="templateMeta">-</div>
+                </div>
+                <div class="workspace-actions">
+                    <button id="saveTemplate" type="button" data-i18n="saveTemplate">Vorlage speichern</button>
+                    <button id="prepareJob" type="button" class="primary" data-i18n="prepareJob">Auftrag vorbereiten</button>
+                </div>
             </div>
-            <textarea id="configEditor" spellcheck="false">{{ initial_config }}</textarea>
+
+            <div class="workspace-grid">
+                <form id="templateForm" class="form-stack">
+                    <section class="form-section">
+                        <h3 data-i18n="identity">Identität</h3>
+                        <div class="field-grid three">
+                            <label><span data-i18n="name">Bezeichnung</span>
+                                <input id="fieldName" name="name" required>
+                            </label>
+                            <label><span data-i18n="type">Fräsertyp</span>
+                                <input id="fieldType" name="type">
+                            </label>
+                            <label><span data-i18n="material">Material</span>
+                                <select id="fieldMaterial" name="material">
+                                    <option value="VHM">VHM</option>
+                                    <option value="HSS">HSS</option>
+                                    <option value="PKD">PKD</option>
+                                </select>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="form-section">
+                        <h3 data-i18n="geometry">Geometrie</h3>
+                        <div class="field-grid three">
+                            <label><span data-i18n="nominalDiameter">Nenndurchmesser</span>
+                                <div class="unit-input"><input id="fieldDiameter" name="diameter" type="number" step="0.001"><span>mm</span></div>
+                            </label>
+                            <label><span data-i18n="cuttingLength">Schneidenlänge</span>
+                                <div class="unit-input"><input id="fieldCuttingLength" name="cutting_length" type="number" step="0.001"><span>mm</span></div>
+                            </label>
+                            <label><span data-i18n="targetDiameter">Zieldurchmesser</span>
+                                <div class="unit-input"><input id="fieldTargetDiameter" name="target_diameter" type="number" step="0.001"><span>mm</span></div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="form-section">
+                        <h3 data-i18n="cuttingData">Schneiden und Drall</h3>
+                        <div class="field-grid three">
+                            <label><span data-i18n="flutes">Schneidenzahl</span>
+                                <input id="fieldFlutes" name="flutes" type="number" min="1" step="1">
+                            </label>
+                            <label><span data-i18n="helix">Drall Grad/mm</span>
+                                <div class="unit-input"><input id="fieldHelix" name="helix" type="number" step="0.001"><span>°/mm</span></div>
+                            </label>
+                            <label><span data-i18n="frontXEnd">Stirn X Ende</span>
+                                <div class="unit-input"><input id="fieldFrontXEnd" name="front_x_end" type="number" step="0.001"><span>mm</span></div>
+                            </label>
+                        </div>
+                    </section>
+
+                    <section class="form-section">
+                        <h3 data-i18n="standardGeometry">Normnahe Werkzeugmerkmale</h3>
+                        <div class="field-grid three">
+                            <label><span data-i18n="toolFamily">Werkzeugfamilie</span>
+                                <select id="fieldToolFamily">
+                                    <option value="end_mill" data-i18n="endMill">Schaftfräser</option>
+                                    <option value="ball_nose" data-i18n="ballNose">Kugelkopffräser</option>
+                                    <option value="radius_mill" data-i18n="radiusMill">Torusfräser</option>
+                                    <option value="drill" data-i18n="drill">Bohrer</option>
+                                    <option value="reamer" data-i18n="reamer">Reibahle</option>
+                                    <option value="countersink" data-i18n="countersink">Senker</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="cuttingDirection">Schneidrichtung</span>
+                                <select id="fieldCuttingDirection">
+                                    <option value="right" data-i18n="rightHand">Rechtsschneidend</option>
+                                    <option value="left" data-i18n="leftHand">Linksschneidend</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="helixDirection">Drallrichtung</span>
+                                <select id="fieldHelixDirection">
+                                    <option value="right" data-i18n="rightHelix">Rechtsdrall</option>
+                                    <option value="left" data-i18n="leftHelix">Linksdrall</option>
+                                    <option value="straight" data-i18n="straightFlute">Geradegenutet</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="helixAngle">Drallwinkel</span>
+                                <div class="unit-input"><input id="fieldHelixAngle" type="number" step="0.1"><span>°</span></div>
+                            </label>
+                            <label><span data-i18n="helixValueSource">Quelle der Drallangabe</span>
+                                <select id="fieldHelixSource">
+                                    <option value="manufacturer" data-i18n="manufacturerValue">Herstellerangabe</option>
+                                    <option value="measured" data-i18n="measuredValue">An Maschine gemessen</option>
+                                    <option value="unknown" data-i18n="unknownValue">Noch unbekannt</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="cornerStyle">Eckenform</span>
+                                <select id="fieldCornerStyle">
+                                    <option value="square" data-i18n="squareCorner">Scharfkantig</option>
+                                    <option value="radius" data-i18n="cornerRadius">Eckenradius</option>
+                                    <option value="chamfer" data-i18n="cornerChamfer">Eckenfase</option>
+                                    <option value="ball" data-i18n="fullRadius">Vollradius</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="cornerRadiusValue">Eckenradius</span>
+                                <div class="unit-input"><input id="fieldCornerRadius" type="number" step="0.001"><span>mm</span></div>
+                            </label>
+                            <label><span data-i18n="coating">Beschichtung</span><input id="fieldCoating"></label>
+                            <label><span data-i18n="shankForm">Schaftform</span>
+                                <select id="fieldShankForm">
+                                    <option value="cylindrical" data-i18n="cylindrical">Zylindrisch</option>
+                                    <option value="weldon" data-i18n="weldon">Weldon</option>
+                                    <option value="whistle_notch" data-i18n="whistleNotch">Whistle-Notch</option>
+                                </select>
+                            </label>
+                            <label><span data-i18n="coolantSupply">Kühlmittelzufuhr</span>
+                                <select id="fieldCoolantSupply">
+                                    <option value="none" data-i18n="none">Keine</option>
+                                    <option value="external" data-i18n="external">Extern</option>
+                                    <option value="internal" data-i18n="internal">Innenkühlung</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="mode-checks">
+                            <label><input id="fieldCenterCutting" type="checkbox"><span data-i18n="centerCutting">Zentrumschneidend</span></label>
+                            <label><input id="fieldVariablePitch" type="checkbox"><span data-i18n="variablePitch">Ungleiche Teilung</span></label>
+                        </div>
+                        <div class="conversion-actions">
+                            <button id="angleToSlope" type="button" data-i18n="angleToSlope">Winkel → Grad/mm</button>
+                            <button id="slopeToAngle" type="button" data-i18n="slopeToAngle">Grad/mm → Winkel</button>
+                        </div>
+                        <div class="engineering-note" data-i18n="helixSeparationNote">Drallwinkel (°) beschreibt die Werkzeuggeometrie. Grad/mm bleibt getrennt als kinematische A/X-Steigung des Generators gespeichert.</div>
+                    </section>
+
+                    <section class="form-section job-settings">
+                        <h3 data-i18n="jobSetup">Auftragsvorbereitung</h3>
+                        <div class="field-grid three">
+                            <label><span data-i18n="physicalCutter">Konkreter Fräser</span>
+                                <select id="cutterSelect"></select>
+                            </label>
+                            <label><span data-i18n="strategy">Strategie</span>
+                                <select id="strategySelect"></select>
+                            </label>
+                            <label><span data-i18n="mode">Modus</span>
+                                <select id="modeSelect">
+                                    <option value="both" data-i18n="edgeFront">Umfang + Stirn</option>
+                                    <option value="edge" data-i18n="edge">Umfang</option>
+                                    <option value="front" data-i18n="front">Stirn</option>
+                                    <option value="measure" data-i18n="measure">Vermessen</option>
+                                </select>
+                            </label>
+                        </div>
+                    </section>
+                </form>
+
+                <aside class="technical-rail">
+                    <section class="tool-figure">
+                        <div class="section-label" data-i18n="toolPreview">Werkzeugdarstellung</div>
+                        <svg viewBox="0 0 260 350" role="img" aria-label="Schematischer Schaftfräser">
+                            <defs>
+                                <linearGradient id="bodySteel" x1="0" x2="1">
+                                    <stop offset="0" stop-color="#697982"/>
+                                    <stop offset=".24" stop-color="#f5f8f9"/>
+                                    <stop offset=".52" stop-color="#9eabb2"/>
+                                    <stop offset=".76" stop-color="#f7f9fa"/>
+                                    <stop offset="1" stop-color="#63727b"/>
+                                </linearGradient>
+                            </defs>
+                            <path d="M91 34 H169 V194 C169 221 156 237 151 246 V322 H109 V246 C104 237 91 221 91 194 Z" fill="url(#bodySteel)" stroke="#34434c" stroke-width="2"/>
+                            <path d="M94 44 C144 52 108 101 165 112 M94 95 C149 106 107 154 165 168 M94 151 C146 160 112 205 159 219" fill="none" stroke="#263a46" stroke-width="18" opacity=".72"/>
+                            <path d="M101 35 C136 59 122 89 157 112 M100 91 C137 116 122 145 158 169 M101 147 C137 172 124 201 156 221" fill="none" stroke="#dce5e9" stroke-width="5" opacity=".9"/>
+                            <path d="M62 34 H52 V194 H62 M198 34 H208 V322 H198 M83 20 H177" fill="none" stroke="#6f7c84"/>
+                            <text x="115" y="16">D</text><text x="22" y="118">L2</text><text x="215" y="184">L1</text>
+                            <text id="figureDiameter" x="130" y="341" text-anchor="middle">Ø -</text>
+                        </svg>
+                    </section>
+                    <section class="validation-box">
+                        <span class="validation-icon">✓</span>
+                        <div><strong data-i18n="validated">Strukturell validiert</strong><small data-i18n="validationHint">Generatorprüfung erfolgt vor Ausgabe</small></div>
+                    </section>
+                    <section class="rail-section">
+                        <div class="section-label" data-i18n="grindingTools">Schleifwerkzeuge</div>
+                        <div id="grindingToolList" class="compact-list"></div>
+                    </section>
+                </aside>
+            </div>
+
+            <section class="process-section">
+                <div class="section-label" data-i18n="process">Prozessablauf</div>
+                <div class="process-flow">
+                    <div class="process-step active"><b>1</b><span data-i18n="templateStep">Vorlage</span></div><i>→</i>
+                    <div class="process-step"><b>2</b><span data-i18n="cutterStep">Fräser</span></div><i>→</i>
+                    <div class="process-step"><b>3</b><span data-i18n="measureStep">Vermessen</span></div><i>→</i>
+                    <div class="process-step"><b>4</b><span data-i18n="strategyStep">Strategie</span></div><i>→</i>
+                    <div class="process-step"><b>5</b><span data-i18n="gcodeStep">G-Code</span></div><i>→</i>
+                    <div class="process-step"><b>6</b><span data-i18n="resultStep">Ergebnis</span></div>
+                </div>
+            </section>
+
+            <section class="history-section">
+                <div class="section-row">
+                    <div>
+                        <div class="section-label" data-i18n="recentJobs">Letzte Aufträge</div>
+                        <p data-i18n="historyHint">Unveränderliche Parameter-Snapshots je Generierung</p>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr>
+                            <th data-i18n="jobNumber">Auftrag</th>
+                            <th data-i18n="toolId">Werkzeug-ID</th>
+                            <th data-i18n="template">Vorlage</th>
+                            <th data-i18n="mode">Modus</th>
+                            <th data-i18n="targetDiameter">Zieldurchmesser</th>
+                            <th data-i18n="statusLabel">Status</th>
+                            <th data-i18n="date">Datum</th>
+                        </tr></thead>
+                        <tbody id="jobsTable"></tbody>
+                    </table>
+                </div>
+            </section>
         </section>
 
-        <section class="panel preview-panel">
-            <div class="panel-title">
-                <span data-i18n="gcodePreview">G-Code Vorschau</span>
-                <span id="previewName"></span>
+        <section id="adminWorkspace" class="admin-workspace" hidden>
+            <div class="workspace-header">
+                <div>
+                    <div class="eyeline" id="adminEyeline">Datenbank</div>
+                    <h2 id="adminTitle">-</h2>
+                    <div class="meta-line" id="adminHint">-</div>
+                </div>
+                <button id="adminNew" type="button" class="primary">Neu anlegen</button>
             </div>
-            <pre id="preview" data-empty-preview="true">(Noch kein G-Code erzeugt)</pre>
+
+            <div class="admin-layout">
+                <section class="admin-list-panel">
+                    <label class="search-box admin-search">
+                        <span class="search-icon">⌕</span>
+                        <input id="adminSearch" type="search" placeholder="Suchen">
+                    </label>
+                    <div id="adminList" class="admin-list"></div>
+                </section>
+
+                <section class="admin-editor">
+                    <form id="cutterAdminForm" class="admin-form" hidden>
+                        <div class="form-section">
+                            <h3 data-i18n="cutterIdentity">Werkzeugidentität</h3>
+                            <div class="field-grid three">
+                                <label><span data-i18n="toolId">Werkzeug-ID</span><input id="adminCutterUid" required></label>
+                                <label><span data-i18n="template">Vorlage</span><select id="adminCutterTemplate"></select></label>
+                                <label><span data-i18n="statusLabel">Status</span><select id="adminCutterStatus" class="status-select"></select></label>
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <h3 data-i18n="currentState">Aktueller Zustand</h3>
+                            <div class="field-grid three">
+                                <label><span data-i18n="currentDiameter">Ist-Durchmesser</span><div class="unit-input"><input id="adminCutterDiameter" type="number" step="0.001" required><span>mm</span></div></label>
+                                <label><span data-i18n="currentLength">Ist-Länge</span><div class="unit-input"><input id="adminCutterLength" type="number" step="0.001"><span>mm</span></div></label>
+                                <label><span data-i18n="location">Lagerort</span><input id="adminCutterLocation"></label>
+                            </div>
+                            <label class="wide-field"><span data-i18n="notes">Notizen</span><textarea id="adminCutterNotes" rows="4"></textarea></label>
+                        </div>
+                        <div class="editor-actions"><button type="submit" class="primary" data-i18n="save">Speichern</button></div>
+                    </form>
+
+                    <form id="wheelAdminForm" class="admin-form" hidden>
+                        <div class="form-section">
+                            <h3 data-i18n="grindingToolData">Schleifwerkzeugdaten</h3>
+                            <div class="field-grid three">
+                                <label><span data-i18n="toolId">Werkzeug-ID</span><input id="adminWheelUid" required></label>
+                                <label><span data-i18n="name">Bezeichnung</span><input id="adminWheelName" required></label>
+                                <label><span data-i18n="toolType">Werkzeugart</span>
+                                    <select id="adminWheelType">
+                                        <option value="edge" data-i18n="edge">Umfang</option>
+                                        <option value="front" data-i18n="front">Stirn</option>
+                                        <option value="probe" data-i18n="probe">Taster</option>
+                                    </select>
+                                </label>
+                                <label><span data-i18n="specification">Spezifikation</span><input id="adminWheelSpecification" required></label>
+                                <label><span data-i18n="diameter">Durchmesser</span><div class="unit-input"><input id="adminWheelDiameter" type="number" step="0.001" required><span>mm</span></div></label>
+                                <label><span data-i18n="maxRpm">Max. Drehzahl</span><div class="unit-input"><input id="adminWheelRpm" type="number" step="1"><span>rpm</span></div></label>
+                                <label><span data-i18n="statusLabel">Status</span><select id="adminWheelStatus" class="status-select"></select></label>
+                            </div>
+                        </div>
+                        <div class="editor-actions"><button type="submit" class="primary" data-i18n="save">Speichern</button></div>
+                    </form>
+
+                    <form id="strategyAdminForm" class="admin-form" hidden>
+                        <div class="strategy-warning" data-i18n="strategyVersionHint">Änderungen erzeugen immer eine neue, nachvollziehbare Strategieversion.</div>
+                        <div class="form-section">
+                            <h3 data-i18n="strategyData">Strategiedaten</h3>
+                            <div class="field-grid three">
+                                <label><span data-i18n="name">Bezeichnung</span><input id="adminStrategyName" required></label>
+                                <label><span data-i18n="statusLabel">Status</span>
+                                    <select id="adminStrategyStatus">
+                                        <option value="draft" data-i18n="draft">Entwurf</option>
+                                        <option value="released" data-i18n="released">Freigegeben</option>
+                                        <option value="retired" data-i18n="retired">Stillgelegt</option>
+                                    </select>
+                                </label>
+                                <label class="checkbox-field"><input id="adminStrategyMeasure" type="checkbox"><span data-i18n="requiresMeasurement">Vermessung erforderlich</span></label>
+                            </div>
+                            <div class="mode-checks">
+                                <label><input type="checkbox" name="strategyMode" value="edge"><span data-i18n="edge">Umfang</span></label>
+                                <label><input type="checkbox" name="strategyMode" value="front"><span data-i18n="front">Stirn</span></label>
+                                <label><input type="checkbox" name="strategyMode" value="both"><span data-i18n="edgeFront">Umfang + Stirn</span></label>
+                                <label><input type="checkbox" name="strategyMode" value="measure"><span data-i18n="measure">Vermessen</span></label>
+                            </div>
+                            <div class="field-grid two">
+                                <label><span data-i18n="descriptionDe">Beschreibung Deutsch</span><textarea id="adminStrategyDe" rows="5" required></textarea></label>
+                                <label><span data-i18n="descriptionEn">Beschreibung Englisch</span><textarea id="adminStrategyEn" rows="5" required></textarea></label>
+                            </div>
+                        </div>
+                        <div class="editor-actions"><button type="submit" class="primary" data-i18n="createVersion">Neue Version anlegen</button></div>
+                    </form>
+
+                    <section id="jobsAdminPanel" class="admin-form" hidden>
+                        <div class="form-section">
+                            <h3 data-i18n="jobHistory">Auftragshistorie</h3>
+                            <div class="table-wrap">
+                                <table>
+                                    <thead><tr>
+                                        <th data-i18n="jobNumber">Auftrag</th><th data-i18n="toolId">Werkzeug-ID</th>
+                                        <th data-i18n="template">Vorlage</th><th data-i18n="mode">Modus</th>
+                                        <th data-i18n="targetDiameter">Zieldurchmesser</th><th data-i18n="statusLabel">Status</th>
+                                        <th data-i18n="date">Datum</th>
+                                    </tr></thead>
+                                    <tbody id="allJobsTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+            </div>
         </section>
     </main>
 
-    <script>
-        window.initialConfig = {{ initial_config|safe }};
-    </script>
+    <dialog id="templateDialog">
+        <form method="dialog" id="newTemplateForm">
+            <h2 data-i18n="newTemplate">Neue Vorlage</h2>
+            <p data-i18n="newTemplateHint">Die neue Vorlage übernimmt sichere Grundwerte der aktuell ausgewählten Vorlage.</p>
+            <label><span data-i18n="name">Bezeichnung</span><input id="newTemplateName" required></label>
+            <div class="dialog-actions">
+                <button value="cancel" data-i18n="cancel">Abbrechen</button>
+                <button id="confirmNewTemplate" value="default" class="primary" data-i18n="create">Anlegen</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div id="toast" class="toast" hidden></div>
     <script src="/static/app.js"></script>
 </body>
 </html>

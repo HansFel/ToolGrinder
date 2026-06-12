@@ -507,6 +507,24 @@ def berechne_drall_grad_pro_mm(x1, a1, x2, a2):
     return (float(a2) - float(a1)) / dx
 
 
+def drall_steigung_aus_winkel(drallwinkel_grad, durchmesser):
+    """Convert a cylindrical helix angle relative to the tool axis to deg/mm."""
+    diameter = float(durchmesser)
+    if diameter <= 0:
+        raise ValueError('Der Durchmesser muss > 0 sein')
+    angle = math.radians(float(drallwinkel_grad))
+    return 360.0 * math.tan(angle) / (math.pi * diameter)
+
+
+def drallwinkel_aus_steigung(drall_grad_pro_mm, durchmesser):
+    """Convert cylindrical angular slope in deg/mm to helix angle from the axis."""
+    diameter = float(durchmesser)
+    if diameter <= 0:
+        raise ValueError('Der Durchmesser muss > 0 sein')
+    slope = float(drall_grad_pro_mm)
+    return math.degrees(math.atan(slope * math.pi * diameter / 360.0))
+
+
 def fraeser_schneidenanzahl(cfg):
     """Return configured flute count, supporting old and new config names."""
     return int(cfg.get('fraeser', cfg.get('werkzeug', {})).get('schneidenanzahl', 1))

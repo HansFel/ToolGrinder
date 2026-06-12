@@ -9,7 +9,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY Grinder.py webapp.py ./
+COPY Grinder.py webapp.py toolgrinder_db.py ./
 COPY ToolLib ./ToolLib
 COPY templates ./templates
 COPY static ./static
@@ -18,4 +18,4 @@ RUN mkdir -p /app/data/generated
 
 EXPOSE 8080
 
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:8080", "webapp:app"]
+CMD ["gunicorn", "-w", "1", "-b", "0.0.0.0:8080", "webapp:app"]

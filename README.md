@@ -3,6 +3,27 @@
 G-Code Generator zum Schleifen von Werkzeugen auf einer vierachsigen CNC
 mit X/Y/Z/A-Achsen und Schleifmittel in der Spindel.
 
+## Datenbank-Weboberflaeche
+
+Die Weboberflaeche unter `http://127.0.0.1:8080` verwendet SQLite als fuehrende
+Datenquelle. Verwaltet werden:
+
+- Fraeser-Vorlagen und konkrete physische Fraeser
+- Schleifwerkzeuge
+- versionierte Schleifstrategien
+- erzeugte Auftraege mit unveraenderlichem Parameter-Snapshot
+
+Vorhandene Dateien aus `ToolLib/*.json` werden beim ersten Start importiert.
+JSON bleibt als internes Kompatibilitaetsformat fuer die bestehenden
+Generatorfunktionen erhalten, wird in der normalen Weboberflaeche aber nicht
+direkt bearbeitet.
+
+Drallwerte koennen als Herstellerwinkel in Grad, als an der Maschine gemessene
+A/X-Steigung in Grad/mm oder als noch unbekannt gespeichert werden. Eine
+Umrechnung erfolgt nur bewusst und verwendet den aktuellen Werkzeugdurchmesser.
+
+Die Anwendung ist Deutsch/Englisch umschaltbar.
+
 ## Optionale Maschinenlimits
 
 Wenn in der Konfiguration `maschine.limits` gesetzt ist, prueft ToolGrinder

@@ -7,6 +7,8 @@ from pathlib import Path
 from Grinder import (
     berechne_durchmesser_aus_z_antastung,
     berechne_drall_grad_pro_mm,
+    drall_steigung_aus_winkel,
+    drallwinkel_aus_steigung,
     generiere_linuxcnc_vermess_gcode,
     korrigiere_tastpunkt_linear,
     probe_a_search_span,
@@ -50,6 +52,19 @@ class TestProbeMeasurement(unittest.TestCase):
 
     def test_helix_slope_from_two_points(self):
         self.assertEqual(berechne_drall_grad_pro_mm(0.0, 12.0, 10.0, 32.0), 2.0)
+
+    def test_helix_angle_and_slope_conversion_round_trip(self):
+        slope = drall_steigung_aus_winkel(30.0, 12.0)
+        angle = drallwinkel_aus_steigung(slope, 12.0)
+
+        self.assertAlmostEqual(slope, 5.513289, places=6)
+        self.assertAlmostEqual(angle, 30.0, places=9)
+
+    def test_helix_conversion_requires_positive_diameter(self):
+        with self.assertRaises(ValueError):
+            drall_steigung_aus_winkel(30.0, 0.0)
+        with self.assertRaises(ValueError):
+            drallwinkel_aus_steigung(2.0, -1.0)
 
     def test_probe_config_validates_template(self):
         self.assertEqual(validate_probe_config(self.template), [])

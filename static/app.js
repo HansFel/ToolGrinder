@@ -1,416 +1,686 @@
-const editor = document.getElementById("configEditor");
-const statusEl = document.getElementById("status");
-const outputsEl = document.getElementById("outputs");
-const previewEl = document.getElementById("preview");
-const previewNameEl = document.getElementById("previewName");
-const readoutToolEl = document.getElementById("readoutTool");
-const readoutFlutesEl = document.getElementById("readoutFlutes");
-const readoutTargetEl = document.getElementById("readoutTarget");
-const measureGroupEl = document.getElementById("measureGroup");
-const languageSelectEl = document.getElementById("languageSelect");
+const state = {
+    bootstrap: null,
+    selectedTemplate: null,
+    currentView: "templates",
+    selectedAdminId: null,
+    adminCreating: false,
+    language: localStorage.getItem("toolgrinder-language") === "en" ? "en" : "de",
+};
+
 const translations = {
     de: {
-        language: "Sprache",
-        subtitle: "4-Achs Werkzeugschleifen XYZA · Z0 im Werkzeug-Drehmittelpunkt",
-        generate: "G-Code erzeugen",
-        machineVisual: "Schematische Schleifsituation mit Drallfräser und Topfscheibe",
-        axisLabel: "A-Achse dreht um X",
-        wheelLabel: "Topfscheibe / Z-Spindel",
-        contactLabel: "Schleifkontakt",
-        cutter: "Fräser",
-        flutes: "Schneiden",
-        targetDiameter: "Ziel Ø",
-        template: "Vorlage",
-        mode: "Modus",
-        measure: "Vermessen",
-        cutterDiameter: "Fräser Ø",
-        frontXEnd: "Front X Ende",
-        probeTool: "Werkzeug antasten",
-        helixDirection: "Drallrichtung",
-        right: "Rechts",
-        left: "Links",
-        probeBallDiameter: "Tastkugel Ø",
-        probeFeed: "Tastvorschub",
-        safeZ: "Sicheres Z",
-        retract: "Rückzug",
-        frontProbeTarget: "Stirnkante X Ziel",
-        diameterProbeTarget: "Durchmesser Z Ziel",
-        aStart: "A Start",
-        aEnd: "A Ende",
-        aStep: "A Schritt",
-        machineLimits: "Maschinenlimits",
-        applyValues: "Werte übernehmen",
-        jsonConfig: "Konfiguration JSON",
-        format: "Formatieren",
-        gcodePreview: "G-Code Vorschau",
-        emptyPreview: "(Noch kein G-Code erzeugt)",
-        ready: "Bereit",
-        loadingTemplate: "Lade Vorlage",
-        generating: "Generiere",
-        error: "Fehler",
-        finished: "Fertig",
-        applied: "Übernommen",
-        formatted: "Formatiert",
-        templateLoadError: "Vorlage konnte nicht geladen werden.",
-        invalidJson: "JSON ist ungültig: ",
-        unknownError: "Unbekannter Fehler",
-        bytes: "Bytes",
-        download: "Download",
+        language: "Sprache", subtitle: "Werkzeugdaten, Strategien und sichere G-Code-Erzeugung",
+        mainNavigation: "Hauptnavigation", dashboard: "Übersicht", templates: "Fräser-Vorlagen",
+        cutters: "Geschärfte Fräser", grindingTools: "Schleifwerkzeuge", strategies: "Strategien",
+        jobs: "Aufträge", settings: "Einstellungen", templateHint: "Dynamische Stammdaten aus der Datenbank",
+        searchTemplates: "Name, Typ oder Material suchen", database: "Datenbank", activeTemplates: "aktive Vorlagen",
+        selectedTemplate: "Ausgewählte Vorlage", saveTemplate: "Vorlage speichern",
+        prepareJob: "Auftrag vorbereiten", identity: "Identität", name: "Bezeichnung", type: "Fräsertyp",
+        material: "Material", geometry: "Geometrie", nominalDiameter: "Nenndurchmesser",
+        cuttingLength: "Schneidenlänge", targetDiameter: "Zieldurchmesser",
+        cuttingData: "Schneiden und Drall", flutes: "Schneidenzahl", helix: "Drall Grad/mm",
+        frontXEnd: "Stirn X Ende", jobSetup: "Auftragsvorbereitung", physicalCutter: "Konkreter Fräser",
+        strategy: "Strategie", mode: "Modus", edgeFront: "Umfang + Stirn", edge: "Umfang",
+        front: "Stirn", measure: "Vermessen", toolPreview: "Werkzeugdarstellung",
+        validated: "Strukturell validiert", validationHint: "Generatorprüfung erfolgt vor Ausgabe",
+        process: "Prozessablauf", templateStep: "Vorlage", cutterStep: "Fräser", measureStep: "Vermessen",
+        strategyStep: "Strategie", gcodeStep: "G-Code", resultStep: "Ergebnis",
+        recentJobs: "Letzte Aufträge", historyHint: "Unveränderliche Parameter-Snapshots je Generierung",
+        jobNumber: "Auftrag", toolId: "Werkzeug-ID", template: "Vorlage", statusLabel: "Status",
+        date: "Datum", newTemplate: "Neue Vorlage",
+        newTemplateHint: "Die neue Vorlage übernimmt sichere Grundwerte der aktuell ausgewählten Vorlage.",
+        cancel: "Abbrechen", create: "Anlegen", ready: "Bereit", loading: "Laden",
+        saving: "Speichern", saved: "Gespeichert", generating: "Generiere", finished: "Fertig",
+        noJobs: "Noch keine Aufträge erzeugt", noMatchingTemplates: "Keine passende Vorlage",
+        noCutter: "Kein konkreter Fräser", templateCreated: "Vorlage wurde angelegt.",
+        templateSaved: "Vorlage wurde gespeichert.", generated: "G-Code wurde erzeugt.",
+        cutterIdentity: "Werkzeugidentität", currentState: "Aktueller Zustand",
+        currentDiameter: "Ist-Durchmesser", currentLength: "Ist-Länge", location: "Lagerort",
+        notes: "Notizen", save: "Speichern", grindingToolData: "Schleifwerkzeugdaten",
+        toolType: "Werkzeugart", probe: "Taster", specification: "Spezifikation",
+        diameter: "Durchmesser", maxRpm: "Max. Drehzahl",
+        strategyVersionHint: "Änderungen erzeugen immer eine neue, nachvollziehbare Strategieversion.",
+        strategyData: "Strategiedaten", draft: "Entwurf", released: "Freigegeben",
+        retired: "Stillgelegt", requiresMeasurement: "Vermessung erforderlich",
+        descriptionDe: "Beschreibung Deutsch", descriptionEn: "Beschreibung Englisch",
+        createVersion: "Neue Version anlegen", jobHistory: "Auftragshistorie",
+        newCutter: "Neuer konkreter Fräser", newGrindingTool: "Neues Schleifwerkzeug",
+        newStrategy: "Neue Strategieversion", manageCutters: "Werkzeugbestand und Lebenslauf verwalten",
+        manageWheels: "Schleifscheiben und Taster verwalten",
+        manageStrategies: "Versionierte und freigegebene Bearbeitungsvorschriften",
+        manageJobs: "Erzeugte Aufträge und unveränderliche Snapshots",
+        recordSaved: "Datensatz wurde gespeichert.", versionCreated: "Strategieversion wurde angelegt.",
+        search: "Suchen", newRecord: "Neu anlegen",
+        standardGeometry: "Normnahe Werkzeugmerkmale", toolFamily: "Werkzeugfamilie",
+        endMill: "Schaftfräser", ballNose: "Kugelkopffräser", radiusMill: "Torusfräser",
+        drill: "Bohrer", reamer: "Reibahle", countersink: "Senker",
+        cuttingDirection: "Schneidrichtung", rightHand: "Rechtsschneidend", leftHand: "Linksschneidend",
+        helixDirection: "Drallrichtung", rightHelix: "Rechtsdrall", leftHelix: "Linksdrall",
+        straightFlute: "Geradegenutet", helixAngle: "Drallwinkel", cornerStyle: "Eckenform",
+        squareCorner: "Scharfkantig", cornerRadius: "Eckenradius", cornerChamfer: "Eckenfase",
+        fullRadius: "Vollradius", cornerRadiusValue: "Eckenradius", coating: "Beschichtung",
+        shankForm: "Schaftform", cylindrical: "Zylindrisch", weldon: "Weldon",
+        whistleNotch: "Whistle-Notch", coolantSupply: "Kühlmittelzufuhr", none: "Keine",
+        external: "Extern", internal: "Innenkühlung", centerCutting: "Zentrumschneidend",
+        variablePitch: "Ungleiche Teilung",
+        helixValueSource: "Quelle der Drallangabe", manufacturerValue: "Herstellerangabe",
+        measuredValue: "An Maschine gemessen", unknownValue: "Noch unbekannt",
+        angleToSlope: "Winkel → Grad/mm", slopeToAngle: "Grad/mm → Winkel",
+        conversionDone: "Drallwert wurde aus Durchmesser und Zylinderhelix umgerechnet.",
+        helixSeparationNote: "Drallwinkel (°) beschreibt die Werkzeuggeometrie. Grad/mm bleibt getrennt als kinematische A/X-Steigung des Generators gespeichert.",
     },
     en: {
-        language: "Language",
-        subtitle: "4-axis XYZA tool grinding · Z0 at the tool rotation center",
-        generate: "Generate G-code",
-        machineVisual: "Schematic grinding setup with helical cutter and cup wheel",
-        axisLabel: "A axis rotates around X",
-        wheelLabel: "Cup wheel / Z spindle",
-        contactLabel: "Grinding contact",
-        cutter: "Cutter",
-        flutes: "Flutes",
-        targetDiameter: "Target Ø",
-        template: "Template",
-        mode: "Mode",
-        measure: "Measure",
-        cutterDiameter: "Cutter Ø",
-        frontXEnd: "Front X end",
-        probeTool: "Probe tool",
-        helixDirection: "Helix direction",
-        right: "Right",
-        left: "Left",
-        probeBallDiameter: "Probe ball Ø",
-        probeFeed: "Probe feed",
-        safeZ: "Safe Z",
-        retract: "Retract",
-        frontProbeTarget: "Front edge X target",
-        diameterProbeTarget: "Diameter Z target",
-        aStart: "A start",
-        aEnd: "A end",
-        aStep: "A step",
-        machineLimits: "Machine limits",
-        applyValues: "Apply values",
-        jsonConfig: "JSON configuration",
-        format: "Format",
-        gcodePreview: "G-code preview",
-        emptyPreview: "(No G-code generated yet)",
-        ready: "Ready",
-        loadingTemplate: "Loading template",
-        generating: "Generating",
-        error: "Error",
-        finished: "Done",
-        applied: "Applied",
-        formatted: "Formatted",
-        templateLoadError: "Template could not be loaded.",
-        invalidJson: "JSON is invalid: ",
-        unknownError: "Unknown error",
-        bytes: "bytes",
-        download: "Download",
+        language: "Language", subtitle: "Tool data, strategies and safe G-code generation",
+        mainNavigation: "Main navigation", dashboard: "Overview", templates: "Cutter templates",
+        cutters: "Sharpened cutters", grindingTools: "Grinding tools", strategies: "Strategies",
+        jobs: "Jobs", settings: "Settings", templateHint: "Dynamic master data from the database",
+        searchTemplates: "Search name, type or material", database: "Database", activeTemplates: "active templates",
+        selectedTemplate: "Selected template", saveTemplate: "Save template",
+        prepareJob: "Prepare job", identity: "Identity", name: "Name", type: "Cutter type",
+        material: "Material", geometry: "Geometry", nominalDiameter: "Nominal diameter",
+        cuttingLength: "Cutting length", targetDiameter: "Target diameter",
+        cuttingData: "Cutting edges and helix", flutes: "Number of flutes", helix: "Helix deg/mm",
+        frontXEnd: "End-face X end", jobSetup: "Job preparation", physicalCutter: "Physical cutter",
+        strategy: "Strategy", mode: "Mode", edgeFront: "Peripheral + end", edge: "Peripheral",
+        front: "End", measure: "Measure", toolPreview: "Tool preview",
+        validated: "Structurally validated", validationHint: "Generator validation runs before output",
+        process: "Process", templateStep: "Template", cutterStep: "Cutter", measureStep: "Measure",
+        strategyStep: "Strategy", gcodeStep: "G-code", resultStep: "Result",
+        recentJobs: "Recent jobs", historyHint: "Immutable parameter snapshots for every generation",
+        jobNumber: "Job", toolId: "Tool ID", template: "Template", statusLabel: "Status",
+        date: "Date", newTemplate: "New template",
+        newTemplateHint: "The new template inherits safe base values from the selected template.",
+        cancel: "Cancel", create: "Create", ready: "Ready", loading: "Loading",
+        saving: "Saving", saved: "Saved", generating: "Generating", finished: "Done",
+        noJobs: "No jobs generated yet", noMatchingTemplates: "No matching template",
+        noCutter: "No physical cutter", templateCreated: "Template created.",
+        templateSaved: "Template saved.", generated: "G-code generated.",
+        cutterIdentity: "Tool identity", currentState: "Current condition",
+        currentDiameter: "Current diameter", currentLength: "Current length", location: "Location",
+        notes: "Notes", save: "Save", grindingToolData: "Grinding tool data",
+        toolType: "Tool type", probe: "Probe", specification: "Specification",
+        diameter: "Diameter", maxRpm: "Max. speed",
+        strategyVersionHint: "Changes always create a new traceable strategy version.",
+        strategyData: "Strategy data", draft: "Draft", released: "Released",
+        retired: "Retired", requiresMeasurement: "Measurement required",
+        descriptionDe: "German description", descriptionEn: "English description",
+        createVersion: "Create new version", jobHistory: "Job history",
+        newCutter: "New physical cutter", newGrindingTool: "New grinding tool",
+        newStrategy: "New strategy version", manageCutters: "Manage tool inventory and lifecycle",
+        manageWheels: "Manage grinding wheels and probes",
+        manageStrategies: "Versioned and released machining instructions",
+        manageJobs: "Generated jobs and immutable snapshots",
+        recordSaved: "Record saved.", versionCreated: "Strategy version created.",
+        search: "Search", newRecord: "Create new",
+        standardGeometry: "Standardized tool characteristics", toolFamily: "Tool family",
+        endMill: "End mill", ballNose: "Ball nose", radiusMill: "Corner-radius mill",
+        drill: "Drill", reamer: "Reamer", countersink: "Countersink",
+        cuttingDirection: "Cutting direction", rightHand: "Right cutting", leftHand: "Left cutting",
+        helixDirection: "Helix direction", rightHelix: "Right helix", leftHelix: "Left helix",
+        straightFlute: "Straight flute", helixAngle: "Helix angle", cornerStyle: "Corner style",
+        squareCorner: "Square", cornerRadius: "Corner radius", cornerChamfer: "Corner chamfer",
+        fullRadius: "Full radius", cornerRadiusValue: "Corner radius", coating: "Coating",
+        shankForm: "Shank form", cylindrical: "Cylindrical", weldon: "Weldon",
+        whistleNotch: "Whistle notch", coolantSupply: "Coolant supply", none: "None",
+        external: "External", internal: "Internal", centerCutting: "Center cutting",
+        variablePitch: "Variable pitch",
+        helixValueSource: "Source of helix value", manufacturerValue: "Manufacturer value",
+        measuredValue: "Measured on machine", unknownValue: "Not known yet",
+        angleToSlope: "Angle → deg/mm", slopeToAngle: "deg/mm → angle",
+        conversionDone: "Helix value converted using diameter and cylindrical helix geometry.",
+        helixSeparationNote: "Helix angle (°) describes tool geometry. Degrees/mm remains separate as the generator's kinematic A/X slope.",
     },
 };
-let currentLanguage = localStorage.getItem("toolgrinder-language") === "en" ? "en" : "de";
-const limitMappings = [
-    ["limitXMin", "x_min"],
-    ["limitXMax", "x_max"],
-    ["limitYMin", "y_min"],
-    ["limitYMax", "y_max"],
-    ["limitZMin", "z_min"],
-    ["limitZMax", "z_max"],
-    ["limitAMin", "a_min"],
-    ["limitAMax", "a_max"],
-];
-const probeMappings = [
-    ["probeBallDiameter", "tastkugel_durchmesser"],
-    ["probeFeed", "probe_feed"],
-    ["probeSafeZ", "safe_z"],
-    ["probeRetract", "retract"],
-    ["probeFrontXTarget", "front_x_probe_target"],
-    ["probeDiameterZTarget", "diameter_z_probe_target"],
-    ["probeAStart", "a_such_start"],
-    ["probeAEnd", "a_such_ende"],
-    ["probeAStep", "a_such_schritt"],
-];
-const defaultProbeConfig = {
-    steuerung: "linuxcnc",
-    drallrichtung: "rechts",
-    tastkugel_durchmesser: 3.0,
-    probe_feed: 50.0,
-    rapid_feed: 800.0,
-    safe_z: 20.0,
-    retract: 2.0,
-    front_x_probe_target: -5.0,
-    diameter_z_probe_target: -2.0,
-    a_such_start: 0.0,
-    a_such_schritt: 2.0,
-    ausgabe_datei: "fraeser_vermessen.ngc",
-};
 
-function t(key) {
-    return translations[currentLanguage][key] || translations.de[key] || key;
-}
-
-function setStatus(key) {
-    statusEl.dataset.statusKey = key;
-    statusEl.textContent = t(key);
-}
+const $ = selector => document.querySelector(selector);
+const t = key => translations[state.language][key] || translations.de[key] || key;
 
 function applyLanguage(language) {
-    currentLanguage = language === "en" ? "en" : "de";
-    localStorage.setItem("toolgrinder-language", currentLanguage);
-    document.documentElement.lang = currentLanguage;
-    languageSelectEl.value = currentLanguage;
+    state.language = language === "en" ? "en" : "de";
+    localStorage.setItem("toolgrinder-language", state.language);
+    document.documentElement.lang = state.language;
+    $("#languageSelect").value = state.language;
     document.querySelectorAll("[data-i18n]").forEach(element => {
         element.textContent = t(element.dataset.i18n);
     });
     document.querySelectorAll("[data-i18n-aria-label]").forEach(element => {
         element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
     });
-    setStatus(statusEl.dataset.statusKey || "ready");
-    if (previewEl.dataset.emptyPreview === "true") {
-        previewEl.textContent = t("emptyPreview");
-    }
-    fillQuickFields(readConfig());
+    document.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
+        element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));
+    });
+    setStatus($("#status").dataset.statusKey || "ready");
+    renderStrategies();
+    renderJobs();
+    if (state.currentView !== "templates") renderAdminView();
 }
 
-function readConfig() {
-    return JSON.parse(editor.value);
+function setStatus(key) {
+    $("#status").dataset.statusKey = key;
+    $("#status").textContent = t(key);
 }
 
-function writeConfig(cfg) {
-    editor.value = JSON.stringify(cfg, null, 2);
-    fillQuickFields(cfg);
+async function api(url, options = {}) {
+    const response = await fetch(url, {
+        ...options,
+        headers: {"Content-Type": "application/json", ...(options.headers || {})},
+    });
+    const payload = await response.json();
+    if (!response.ok || payload.ok === false) {
+        throw new Error((payload.errors || ["Request failed"]).join("\n"));
+    }
+    return payload;
 }
 
-function fillQuickFields(cfg) {
-    const diameter = cfg?.fraeser?.durchmesser ?? "";
-    const flutes = cfg?.fraeser?.schneidenanzahl ?? "";
-    const target = cfg?.aktionen?.schneiden?.durchmesser_geschaerft ?? "";
-
-    document.getElementById("toolDiameter").value = diameter;
-    document.getElementById("flutes").value = flutes;
-    document.getElementById("targetDiameter").value = target;
-    document.getElementById("frontXEnd").value = cfg?.aktionen?.front?.x_end ?? "";
-    const probe = {...defaultProbeConfig, ...(cfg?.aktionen?.vermessen || {})};
-    probe.a_such_ende = probe.a_such_ende ?? computeAEndFromFlutes(flutes, probe.a_such_start);
-    document.getElementById("probeHelixDirection").value = probe.drallrichtung || defaultProbeConfig.drallrichtung;
-    for (const [id, key] of probeMappings) {
-        document.getElementById(id).value = probe[key] ?? "";
-    }
-    for (const [id, key] of limitMappings) {
-        document.getElementById(id).value = cfg?.maschine?.limits?.[key] ?? "";
-    }
-
-    readoutToolEl.textContent = diameter === "" ? "-" : `${formatNumber(diameter)} mm`;
-    readoutFlutesEl.textContent = flutes === "" ? "-" : `${flutes}`;
-    readoutTargetEl.textContent = target === "" ? "-" : `${formatNumber(target)} mm`;
-}
-
-function applyQuickFields() {
-    const cfg = readConfig();
-    cfg.fraeser = cfg.fraeser || {};
-    cfg.aktionen = cfg.aktionen || {};
-    cfg.aktionen.schneiden = cfg.aktionen.schneiden || {};
-    cfg.aktionen.front = cfg.aktionen.front || {};
-    cfg.aktionen.vermessen = {...defaultProbeConfig, ...(cfg.aktionen.vermessen || {})};
-    cfg.aktionen.vermessen.drallrichtung = document.getElementById("probeHelixDirection").value || defaultProbeConfig.drallrichtung;
-    cfg.maschine = cfg.maschine || {};
-    cfg.maschine.limits = cfg.maschine.limits || {};
-
-    const mappings = [
-        ["toolDiameter", cfg.fraeser, "durchmesser"],
-        ["flutes", cfg.fraeser, "schneidenanzahl"],
-        ["targetDiameter", cfg.aktionen.schneiden, "durchmesser_geschaerft"],
-        ["frontXEnd", cfg.aktionen.front, "x_end"],
-    ];
-    for (const [id, target, key] of mappings) {
-        const value = document.getElementById(id).value;
-        if (value !== "") target[key] = Number(value);
-    }
-    for (const [id, key] of probeMappings) {
-        const value = document.getElementById(id).value;
-        if (value === "") {
-            delete cfg.aktionen.vermessen[key];
-        } else {
-            cfg.aktionen.vermessen[key] = Number(value);
-        }
-    }
-    cfg.aktionen.vermessen.rapid_feed = Number(cfg.aktionen.vermessen.rapid_feed || defaultProbeConfig.rapid_feed);
-    cfg.aktionen.vermessen.steuerung = cfg.aktionen.vermessen.steuerung || defaultProbeConfig.steuerung;
-    cfg.aktionen.vermessen.ausgabe_datei = cfg.aktionen.vermessen.ausgabe_datei || defaultProbeConfig.ausgabe_datei;
-    for (const [id, key] of limitMappings) {
-        const value = document.getElementById(id).value;
-        if (value === "") {
-            delete cfg.maschine.limits[key];
-        } else {
-            cfg.maschine.limits[key] = Number(value);
-        }
-    }
-    if (!Object.keys(cfg.maschine.limits).length) {
-        delete cfg.maschine.limits;
-    }
-    writeConfig(cfg);
-}
-
-async function loadTemplate(name) {
-    setStatus("loadingTemplate");
-    const response = await fetch(`/api/templates/${encodeURIComponent(name)}`);
-    if (!response.ok) throw new Error(t("templateLoadError"));
-    writeConfig(await response.json());
-    outputsEl.innerHTML = "";
-    previewEl.dataset.emptyPreview = "true";
-    previewEl.textContent = t("emptyPreview");
-    previewNameEl.textContent = "";
+async function loadBootstrap(selectId = null) {
+    setStatus("loading");
+    state.bootstrap = await api("/api/bootstrap");
+    renderTemplates();
+    renderCutters();
+    renderStrategies();
+    renderGrindingTools();
+    renderJobs();
+    const id = selectId || state.selectedTemplate?.id || state.bootstrap.templates[0]?.id;
+    if (id) await selectTemplate(id);
     setStatus("ready");
 }
 
-async function generate() {
-    outputsEl.innerHTML = "";
-    previewEl.dataset.emptyPreview = "false";
-    previewEl.textContent = "";
-    previewNameEl.textContent = "";
-    setStatus("generating");
-
-    let cfg;
-    try {
-        applyQuickFields();
-        cfg = readConfig();
-    } catch (error) {
-        showErrors([t("invalidJson") + error.message]);
-        setStatus("error");
-        return;
-    }
-
-    const mode = document.querySelector("input[name=mode]:checked").value;
-    const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({mode, config: cfg}),
+function renderTemplates() {
+    const query = $("#templateSearch").value.trim().toLocaleLowerCase(state.language);
+    const templates = (state.bootstrap?.templates || []).filter(item =>
+        [item.name, item.type, item.material].join(" ").toLocaleLowerCase(state.language).includes(query)
+    );
+    $("#templateCount").textContent = state.bootstrap?.templates.length || 0;
+    $("#templateList").innerHTML = templates.length ? templates.map(item => `
+        <button class="entity-row ${state.selectedTemplate?.id === item.id ? "active" : ""}" data-template-id="${item.id}" type="button">
+            <span class="tool-mini" aria-hidden="true"></span>
+            <span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.type)} · ${escapeHtml(item.material)} · Ø ${formatNumber(item.diameter)}</small></span>
+            <span class="entity-arrow">›</span>
+        </button>`).join("") : `<div class="empty-row">${t("noMatchingTemplates")}</div>`;
+    document.querySelectorAll("[data-template-id]").forEach(button => {
+        button.addEventListener("click", () => selectTemplate(Number(button.dataset.templateId)));
     });
-    const result = await response.json();
-    if (!response.ok || !result.ok) {
-        showErrors(result.errors || [t("unknownError")]);
-        setStatus("error");
-        return;
-    }
-
-    for (const file of result.files) {
-        const item = document.createElement("div");
-        item.className = "output-item";
-        item.innerHTML = `<strong>${file.name}</strong><div>${file.bytes} <span data-i18n="bytes">${t("bytes")}</span></div><a href="${file.download_url}" data-i18n="download">${t("download")}</a>`;
-        item.addEventListener("click", () => {
-            previewNameEl.textContent = file.name;
-            previewEl.textContent = file.preview;
-        });
-        outputsEl.appendChild(item);
-    }
-    if (result.files.length) {
-        previewNameEl.textContent = result.files[0].name;
-        previewEl.textContent = result.files[0].preview;
-    }
-    setStatus("finished");
 }
 
-function showErrors(errors) {
-    outputsEl.innerHTML = "";
-    const item = document.createElement("div");
-    item.className = "output-item error";
-    item.innerHTML = `<strong data-i18n="error">${t("error")}</strong>${errors.map(e => `<div>${escapeHtml(e)}</div>`).join("")}`;
-    outputsEl.appendChild(item);
+async function selectTemplate(id) {
+    state.selectedTemplate = await api(`/api/cutter-templates/${id}`);
+    const item = state.selectedTemplate;
+    const cfg = item.config || {};
+    const cutter = cfg.fraeser || {};
+    const actions = cfg.aktionen || {};
+    const metadata = item.metadata || {};
+    $("#templateTitle").textContent = item.name;
+    $("#templateMeta").textContent = `${item.type}  |  ${item.material}  |  v${item.version}`;
+    $("#fieldName").value = item.name || "";
+    $("#fieldType").value = item.type || "";
+    $("#fieldMaterial").value = item.material || "VHM";
+    $("#fieldDiameter").value = cutter.durchmesser ?? "";
+    $("#fieldCuttingLength").value = cutter.schneidenlaenge ?? "";
+    $("#fieldFlutes").value = cutter.schneidenanzahl ?? "";
+    $("#fieldHelix").value = cutter.drall_grad_pro_mm ?? "";
+    $("#fieldTargetDiameter").value = actions.schneiden?.durchmesser_geschaerft ?? "";
+    $("#fieldFrontXEnd").value = actions.front?.x_end ?? "";
+    $("#fieldToolFamily").value = metadata.tool_family || "end_mill";
+    $("#fieldCuttingDirection").value = metadata.cutting_direction || "right";
+    $("#fieldHelixDirection").value = metadata.helix_direction || "right";
+    $("#fieldHelixAngle").value = metadata.helix_angle_deg ?? "";
+    $("#fieldHelixSource").value = metadata.helix_value_source || "unknown";
+    $("#fieldCornerStyle").value = metadata.corner_style || "square";
+    $("#fieldCornerRadius").value = metadata.corner_radius ?? "";
+    $("#fieldCoating").value = metadata.coating || "";
+    $("#fieldShankForm").value = metadata.shank_form || "cylindrical";
+    $("#fieldCoolantSupply").value = metadata.coolant_supply || "none";
+    $("#fieldCenterCutting").checked = metadata.center_cutting ?? true;
+    $("#fieldVariablePitch").checked = Boolean(metadata.variable_pitch);
+    $("#figureDiameter").textContent = `Ø ${formatNumber(cutter.durchmesser)}`;
+    renderTemplates();
+    renderCutters();
+}
+
+function formPayload() {
+    return {
+        name: $("#fieldName").value,
+        type: $("#fieldType").value,
+        material: $("#fieldMaterial").value,
+        diameter: Number($("#fieldDiameter").value),
+        cutting_length: Number($("#fieldCuttingLength").value),
+        flutes: Number($("#fieldFlutes").value),
+        helix: Number($("#fieldHelix").value),
+        target_diameter: Number($("#fieldTargetDiameter").value),
+        front_x_end: Number($("#fieldFrontXEnd").value),
+        tool_family: $("#fieldToolFamily").value,
+        cutting_direction: $("#fieldCuttingDirection").value,
+        helix_direction: $("#fieldHelixDirection").value,
+        helix_angle_deg: $("#fieldHelixAngle").value || null,
+        helix_value_source: $("#fieldHelixSource").value,
+        corner_style: $("#fieldCornerStyle").value,
+        corner_radius: $("#fieldCornerRadius").value || null,
+        coating: $("#fieldCoating").value,
+        shank_form: $("#fieldShankForm").value,
+        coolant_supply: $("#fieldCoolantSupply").value,
+        center_cutting: $("#fieldCenterCutting").checked,
+        variable_pitch: $("#fieldVariablePitch").checked,
+    };
+}
+
+async function saveTemplate() {
+    if (!state.selectedTemplate) return;
+    setStatus("saving");
+    const result = await api(`/api/cutter-templates/${state.selectedTemplate.id}`, {
+        method: "PATCH", body: JSON.stringify(formPayload()),
+    });
+    state.selectedTemplate = result.template;
+    await loadBootstrap(result.template.id);
+    setStatus("saved");
+    showToast(t("templateSaved"));
+}
+
+function renderCutters() {
+    const select = $("#cutterSelect");
+    const relevant = (state.bootstrap?.cutters || []).filter(
+        cutter => !state.selectedTemplate || cutter.template_id === state.selectedTemplate.id
+    );
+    const fallback = state.bootstrap?.cutters || [];
+    const cutters = relevant.length ? relevant : fallback;
+    select.innerHTML = cutters.length
+        ? cutters.map(item => `<option value="${item.id}">${escapeHtml(item.tool_uid)} · Ø ${formatNumber(item.current_diameter)}</option>`).join("")
+        : `<option value="">${t("noCutter")}</option>`;
+}
+
+function renderStrategies() {
+    if (!state.bootstrap) return;
+    const mode = $("#modeSelect").value;
+    const strategies = state.bootstrap.strategies.filter(item =>
+        item.status === "released" && (item.parameters?.modes || []).includes(mode)
+    );
+    $("#strategySelect").innerHTML = strategies.map(item => {
+        const description = state.language === "en" ? item.description_en : item.description_de;
+        return `<option value="${item.id}" title="${escapeHtml(description)}">${escapeHtml(item.name)} · v${item.version}</option>`;
+    }).join("") || `<option value="">-</option>`;
+}
+
+function renderGrindingTools() {
+    $("#grindingToolList").innerHTML = (state.bootstrap?.grinding_tools || []).map(item => `
+        <div class="compact-row"><span><strong>${escapeHtml(item.name)}</strong><br>${escapeHtml(item.tool_uid)}</span>
+        <span>${escapeHtml(item.specification)}<br>Ø ${formatNumber(item.diameter)}</span></div>`).join("");
+}
+
+function renderJobs() {
+    if (!state.bootstrap) return;
+    const jobs = state.bootstrap.recent_jobs || [];
+    $("#jobsTable").innerHTML = jobs.length ? jobs.map(job => `
+        <tr><td>${escapeHtml(job.job_number)}</td><td>${escapeHtml(job.tool_uid)}</td>
+        <td>${escapeHtml(job.template_name)}</td><td>${escapeHtml(job.mode)}</td>
+        <td>${formatNumber(job.target_diameter)}</td><td class="status-generated">${escapeHtml(job.status)}</td>
+        <td>${formatDate(job.created_at)}</td></tr>`).join("")
+        : `<tr><td colspan="7" class="empty-row">${t("noJobs")}</td></tr>`;
+}
+
+const statusOptions = ["ready", "maintenance", "blocked", "retired"];
+
+function showView(view) {
+    state.currentView = view;
+    state.selectedAdminId = null;
+    state.adminCreating = false;
+    document.querySelector(".workspace").hidden = view !== "templates";
+    document.querySelector(".library-pane").hidden = view !== "templates";
+    $("#adminWorkspace").hidden = view === "templates";
+    document.querySelectorAll(".nav-item").forEach(button => {
+        button.classList.toggle("active", button.dataset.view === view);
+    });
+    if (view !== "templates") renderAdminView();
+}
+
+function adminCollection() {
+    if (state.currentView === "cutters") return state.bootstrap?.cutters || [];
+    if (state.currentView === "wheels") return state.bootstrap?.grinding_tools || [];
+    if (state.currentView === "strategies") return state.bootstrap?.strategies || [];
+    if (state.currentView === "jobs") return state.bootstrap?.recent_jobs || [];
+    return [];
+}
+
+function adminViewConfig() {
+    return {
+        cutters: {title: t("cutters"), hint: t("manageCutters"), newLabel: t("newCutter")},
+        wheels: {title: t("grindingTools"), hint: t("manageWheels"), newLabel: t("newGrindingTool")},
+        strategies: {title: t("strategies"), hint: t("manageStrategies"), newLabel: t("newStrategy")},
+        jobs: {title: t("jobs"), hint: t("manageJobs"), newLabel: ""},
+    }[state.currentView];
+}
+
+function renderAdminView() {
+    const config = adminViewConfig();
+    if (!config) {
+        showToast(state.currentView === "dashboard" || state.currentView === "settings"
+            ? t("manageJobs") : t("ready"));
+        showView("templates");
+        return;
+    }
+    $("#adminTitle").textContent = config.title;
+    $("#adminEyeline").textContent = t("database");
+    $("#adminHint").textContent = config.hint;
+    $("#adminNew").textContent = config.newLabel;
+    $("#adminNew").hidden = state.currentView === "jobs";
+    $("#adminSearch").placeholder = t("search");
+    hideAdminForms();
+    if (state.currentView === "jobs") {
+        $("#jobsAdminPanel").hidden = false;
+        renderAllJobs();
+    } else {
+        renderAdminList();
+        if (state.selectedAdminId) fillAdminForm(state.selectedAdminId);
+        else startAdminCreate();
+    }
+}
+
+function renderAdminList() {
+    const query = $("#adminSearch").value.trim().toLocaleLowerCase(state.language);
+    const rows = adminCollection().filter(item =>
+        Object.values(item).join(" ").toLocaleLowerCase(state.language).includes(query)
+    );
+    $("#adminList").innerHTML = rows.map(item => {
+        let title;
+        let detail;
+        if (state.currentView === "cutters") {
+            title = item.tool_uid;
+            detail = `${item.template_name} · Ø ${formatNumber(item.current_diameter)} · ${item.location || "-"}`;
+        } else if (state.currentView === "wheels") {
+            title = item.name;
+            detail = `${item.tool_uid} · ${item.specification} · Ø ${formatNumber(item.diameter)}`;
+        } else {
+            title = `${item.name} · v${item.version}`;
+            detail = state.language === "en" ? item.description_en : item.description_de;
+        }
+        return `<button class="admin-row ${state.selectedAdminId === item.id ? "active" : ""}" data-admin-id="${item.id}" type="button">
+            <span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>
+            <span class="status-mark">${escapeHtml(item.status)}</span></button>`;
+    }).join("");
+    document.querySelectorAll("[data-admin-id]").forEach(button => {
+        button.addEventListener("click", () => {
+            state.selectedAdminId = Number(button.dataset.adminId);
+            state.adminCreating = false;
+            renderAdminList();
+            fillAdminForm(state.selectedAdminId);
+        });
+    });
+}
+
+function hideAdminForms() {
+    ["cutterAdminForm", "wheelAdminForm", "strategyAdminForm", "jobsAdminPanel"].forEach(id => {
+        $(`#${id}`).hidden = true;
+    });
+    $("#adminList").hidden = state.currentView === "jobs";
+    $("#adminSearch").closest("label").hidden = state.currentView === "jobs";
+}
+
+function startAdminCreate() {
+    state.selectedAdminId = null;
+    state.adminCreating = true;
+    renderAdminList();
+    if (state.currentView === "cutters") fillCutterForm({});
+    if (state.currentView === "wheels") fillWheelForm({});
+    if (state.currentView === "strategies") fillStrategyForm({});
+}
+
+function fillAdminForm(id) {
+    const item = adminCollection().find(entry => entry.id === id) || {};
+    if (state.currentView === "cutters") fillCutterForm(item);
+    if (state.currentView === "wheels") fillWheelForm(item);
+    if (state.currentView === "strategies") fillStrategyForm(item);
+}
+
+function statusSelectOptions(selected = "ready") {
+    return statusOptions.map(status =>
+        `<option value="${status}" ${selected === status ? "selected" : ""}>${status}</option>`
+    ).join("");
+}
+
+function fillCutterForm(item) {
+    $("#cutterAdminForm").hidden = false;
+    $("#adminCutterUid").value = item.tool_uid || nextToolUid();
+    $("#adminCutterTemplate").innerHTML = state.bootstrap.templates.map(template =>
+        `<option value="${template.id}" ${item.template_id === template.id ? "selected" : ""}>${escapeHtml(template.name)}</option>`
+    ).join("");
+    $("#adminCutterStatus").innerHTML = statusSelectOptions(item.status);
+    $("#adminCutterDiameter").value = item.current_diameter ?? "";
+    $("#adminCutterLength").value = item.current_length ?? "";
+    $("#adminCutterLocation").value = item.location || "";
+    $("#adminCutterNotes").value = item.notes || "";
+}
+
+function nextToolUid() {
+    const year = new Date().getFullYear();
+    const count = (state.bootstrap?.cutters.length || 0) + 1;
+    return `TG-${year}-${String(count).padStart(3, "0")}`;
+}
+
+function fillWheelForm(item) {
+    $("#wheelAdminForm").hidden = false;
+    $("#adminWheelUid").value = item.tool_uid || "";
+    $("#adminWheelName").value = item.name || "";
+    $("#adminWheelType").value = item.tool_type || "edge";
+    $("#adminWheelSpecification").value = item.specification || "";
+    $("#adminWheelDiameter").value = item.diameter ?? "";
+    $("#adminWheelRpm").value = item.max_rpm ?? "";
+    $("#adminWheelStatus").innerHTML = statusSelectOptions(item.status);
+}
+
+function fillStrategyForm(item) {
+    $("#strategyAdminForm").hidden = false;
+    $("#adminStrategyName").value = item.name || "";
+    $("#adminStrategyStatus").value = state.adminCreating ? "draft" : item.status || "draft";
+    $("#adminStrategyDe").value = item.description_de || "";
+    $("#adminStrategyEn").value = item.description_en || "";
+    const parameters = item.parameters || {};
+    $("#adminStrategyMeasure").checked = Boolean(parameters.requires_measurement);
+    document.querySelectorAll("[name=strategyMode]").forEach(input => {
+        input.checked = (parameters.modes || []).includes(input.value);
+    });
+}
+
+function renderAllJobs() {
+    const jobs = state.bootstrap?.recent_jobs || [];
+    $("#allJobsTable").innerHTML = jobs.length ? jobs.map(job => `
+        <tr><td>${escapeHtml(job.job_number)}</td><td>${escapeHtml(job.tool_uid)}</td>
+        <td>${escapeHtml(job.template_name)}</td><td>${escapeHtml(job.mode)}</td>
+        <td>${formatNumber(job.target_diameter)}</td><td>${escapeHtml(job.status)}</td>
+        <td>${formatDate(job.created_at)}</td></tr>`).join("")
+        : `<tr><td colspan="7" class="empty-row">${t("noJobs")}</td></tr>`;
+}
+
+async function saveAdminCutter(event) {
+    event.preventDefault();
+    const payload = {
+        tool_uid: $("#adminCutterUid").value,
+        template_id: Number($("#adminCutterTemplate").value),
+        current_diameter: Number($("#adminCutterDiameter").value),
+        current_length: $("#adminCutterLength").value || null,
+        status: $("#adminCutterStatus").value,
+        location: $("#adminCutterLocation").value,
+        notes: $("#adminCutterNotes").value,
+    };
+    const url = state.adminCreating ? "/api/cutters" : `/api/cutters/${state.selectedAdminId}`;
+    const result = await api(url, {method: state.adminCreating ? "POST" : "PATCH", body: JSON.stringify(payload)});
+    await loadBootstrap(state.selectedTemplate?.id);
+    state.selectedAdminId = result.cutter.id;
+    state.adminCreating = false;
+    renderAdminView();
+    showToast(t("recordSaved"));
+}
+
+async function saveAdminWheel(event) {
+    event.preventDefault();
+    const payload = {
+        tool_uid: $("#adminWheelUid").value,
+        name: $("#adminWheelName").value,
+        tool_type: $("#adminWheelType").value,
+        specification: $("#adminWheelSpecification").value,
+        diameter: Number($("#adminWheelDiameter").value),
+        max_rpm: $("#adminWheelRpm").value || null,
+        status: $("#adminWheelStatus").value,
+    };
+    const url = state.adminCreating ? "/api/grinding-tools" : `/api/grinding-tools/${state.selectedAdminId}`;
+    const result = await api(url, {method: state.adminCreating ? "POST" : "PATCH", body: JSON.stringify(payload)});
+    await loadBootstrap(state.selectedTemplate?.id);
+    state.selectedAdminId = result.grinding_tool.id;
+    state.adminCreating = false;
+    renderAdminView();
+    showToast(t("recordSaved"));
+}
+
+async function saveAdminStrategy(event) {
+    event.preventDefault();
+    const modes = Array.from(document.querySelectorAll("[name=strategyMode]:checked")).map(input => input.value);
+    const result = await api("/api/strategies", {
+        method: "POST",
+        body: JSON.stringify({
+            name: $("#adminStrategyName").value,
+            status: $("#adminStrategyStatus").value,
+            description_de: $("#adminStrategyDe").value,
+            description_en: $("#adminStrategyEn").value,
+            requires_measurement: $("#adminStrategyMeasure").checked,
+            modes,
+        }),
+    });
+    await loadBootstrap(state.selectedTemplate?.id);
+    state.selectedAdminId = result.strategy.id;
+    state.adminCreating = false;
+    renderAdminView();
+    showToast(t("versionCreated"));
+}
+
+async function prepareJob() {
+    if (!state.selectedTemplate) return;
+    await saveTemplate();
+    setStatus("generating");
+    const cutterId = $("#cutterSelect").value;
+    const strategyId = $("#strategySelect").value;
+    if (!strategyId) throw new Error("No released strategy supports the selected mode.");
+    const result = await api("/api/generate", {
+        method: "POST",
+        body: JSON.stringify({
+            template_id: state.selectedTemplate.id,
+            cutter_id: cutterId ? Number(cutterId) : null,
+            strategy_id: Number(strategyId),
+            mode: $("#modeSelect").value,
+        }),
+    });
+    await loadBootstrap(state.selectedTemplate.id);
+    setStatus("finished");
+    const links = result.files.map(file => `<a href="${file.download_url}">${escapeHtml(file.name)}</a>`).join(" · ");
+    showToast(`${t("generated")} ${links}`, false, true);
+}
+
+function showToast(message, isError = false, html = false) {
+    const toast = $("#toast");
+    toast.classList.toggle("error", isError);
+    if (html) toast.innerHTML = message;
+    else toast.textContent = message;
+    toast.hidden = false;
+    window.setTimeout(() => { toast.hidden = true; }, 7000);
+}
+
+function formatNumber(value) {
+    if (value === null || value === undefined || value === "") return "-";
+    const number = Number(value);
+    return Number.isFinite(number)
+        ? number.toLocaleString(state.language === "en" ? "en-US" : "de-DE", {maximumFractionDigits: 3})
+        : String(value);
+}
+
+function formatDate(value) {
+    if (!value) return "-";
+    return new Date(value).toLocaleString(state.language === "en" ? "en-US" : "de-DE", {
+        dateStyle: "short", timeStyle: "short",
+    });
+}
+
+function slopeFromHelixAngle(angleDeg, diameter) {
+    if (!(diameter > 0)) throw new Error("Diameter must be greater than zero.");
+    return 360 * Math.tan(angleDeg * Math.PI / 180) / (Math.PI * diameter);
+}
+
+function helixAngleFromSlope(slope, diameter) {
+    if (!(diameter > 0)) throw new Error("Diameter must be greater than zero.");
+    return Math.atan(slope * Math.PI * diameter / 360) * 180 / Math.PI;
 }
 
 function escapeHtml(value) {
-    return String(value).replace(/[&<>"']/g, ch => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        "\"": "&quot;",
-        "'": "&#39;",
-    }[ch]));
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+    }[char]));
 }
 
-document.getElementById("templateSelect").addEventListener("change", event => {
-    loadTemplate(event.target.value).catch(error => {
-        showErrors([error.message]);
-        setStatus("error");
+$("#languageSelect").addEventListener("change", event => applyLanguage(event.target.value));
+$("#templateSearch").addEventListener("input", renderTemplates);
+$("#saveTemplate").addEventListener("click", () => saveTemplate().catch(handleError));
+$("#prepareJob").addEventListener("click", () => prepareJob().catch(handleError));
+$("#modeSelect").addEventListener("change", renderStrategies);
+$("#angleToSlope").addEventListener("click", () => {
+    try {
+        const value = slopeFromHelixAngle(
+            Number($("#fieldHelixAngle").value),
+            Number($("#fieldDiameter").value)
+        );
+        $("#fieldHelix").value = value.toFixed(6);
+        $("#fieldHelixSource").value = "manufacturer";
+        showToast(t("conversionDone"));
+    } catch (error) {
+        handleError(error);
+    }
+});
+$("#slopeToAngle").addEventListener("click", () => {
+    try {
+        const value = helixAngleFromSlope(
+            Number($("#fieldHelix").value),
+            Number($("#fieldDiameter").value)
+        );
+        $("#fieldHelixAngle").value = value.toFixed(3);
+        $("#fieldHelixSource").value = "measured";
+        showToast(t("conversionDone"));
+    } catch (error) {
+        handleError(error);
+    }
+});
+$("#newTemplate").addEventListener("click", () => {
+    $("#newTemplateName").value = state.selectedTemplate ? `${state.selectedTemplate.name} Copy` : "";
+    $("#templateDialog").showModal();
+});
+$("#newTemplateForm").addEventListener("submit", event => {
+    if (event.submitter?.value === "cancel") return;
+    event.preventDefault();
+    api("/api/cutter-templates", {
+        method: "POST",
+        body: JSON.stringify({
+            source_template_id: state.selectedTemplate.id,
+            name: $("#newTemplateName").value,
+        }),
+    }).then(result => {
+        $("#templateDialog").close();
+        showToast(t("templateCreated"));
+        return loadBootstrap(result.template.id);
+    }).catch(handleError);
+});
+document.querySelectorAll(".nav-item").forEach(button => {
+    button.addEventListener("click", () => {
+        const view = button.dataset.view;
+        if (view === "dashboard" || view === "settings") {
+            showToast(view === "dashboard" ? t("manageJobs") : t("ready"));
+            return;
+        }
+        showView(view);
     });
 });
+$("#adminNew").addEventListener("click", startAdminCreate);
+$("#adminSearch").addEventListener("input", renderAdminList);
+$("#cutterAdminForm").addEventListener("submit", event => saveAdminCutter(event).catch(handleError));
+$("#wheelAdminForm").addEventListener("submit", event => saveAdminWheel(event).catch(handleError));
+$("#strategyAdminForm").addEventListener("submit", event => saveAdminStrategy(event).catch(handleError));
 
-languageSelectEl.addEventListener("change", event => {
-    applyLanguage(event.target.value);
-});
-
-document.querySelectorAll("input[name=mode]").forEach(input => {
-    input.addEventListener("change", updateModePanels);
-});
-
-document.getElementById("flutes").addEventListener("input", () => {
-    const start = document.getElementById("probeAStart").value || 0;
-    document.getElementById("probeAEnd").value = computeAEndFromFlutes(document.getElementById("flutes").value, start);
-});
-
-document.getElementById("applyQuick").addEventListener("click", () => {
-    try {
-        applyQuickFields();
-        setStatus("applied");
-    } catch (error) {
-        showErrors([t("invalidJson") + error.message]);
-        setStatus("error");
-    }
-});
-
-document.getElementById("formatJson").addEventListener("click", () => {
-    try {
-        writeConfig(readConfig());
-        setStatus("formatted");
-    } catch (error) {
-        showErrors([t("invalidJson") + error.message]);
-        setStatus("error");
-    }
-});
-
-document.getElementById("generate").addEventListener("click", () => {
-    generate().catch(error => {
-        showErrors([error.message]);
-        setStatus("error");
-    });
-});
-
-document.getElementById("generateTop").addEventListener("click", () => {
-    document.getElementById("generate").click();
-});
-
-editor.addEventListener("input", () => {
-    try {
-        fillQuickFields(readConfig());
-    } catch {
-        readoutToolEl.textContent = "-";
-        readoutFlutesEl.textContent = "-";
-        readoutTargetEl.textContent = "-";
-        for (const [id] of probeMappings) {
-            document.getElementById(id).value = "";
-        }
-        document.getElementById("probeHelixDirection").value = defaultProbeConfig.drallrichtung;
-        for (const [id] of limitMappings) {
-            document.getElementById(id).value = "";
-        }
-    }
-});
-
-function formatNumber(value) {
-    const number = Number(value);
-    if (!Number.isFinite(number)) return value;
-    return number.toLocaleString(currentLanguage === "en" ? "en-US" : "de-DE", {maximumFractionDigits: 2});
+function handleError(error) {
+    setStatus("ready");
+    showToast(error.message, true);
 }
 
-function computeAEndFromFlutes(flutes, start = 0) {
-    const count = Number(flutes);
-    const startAngle = Number(start) || 0;
-    if (!Number.isFinite(count) || count <= 0) return 360 + startAngle;
-    return startAngle + (360 / count);
-}
-
-function updateModePanels() {
-    const mode = document.querySelector("input[name=mode]:checked").value;
-    measureGroupEl.hidden = mode !== "measure";
-}
-
-applyLanguage(currentLanguage);
-updateModePanels();
+applyLanguage(state.language);
+loadBootstrap().catch(handleError);

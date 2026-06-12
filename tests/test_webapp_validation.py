@@ -1,6 +1,8 @@
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 
 from webapp import create_app, validate_config
 
@@ -37,17 +39,21 @@ class TestWebappValidation(unittest.TestCase):
         self.assertTrue(any('probe_feed' in error for error in errors))
 
     def test_index_exposes_german_english_language_switch(self):
-        app = create_app()
-        app.config['TESTING'] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            app = create_app({
+                'TESTING': True,
+                'DATABASE': str(Path(tmp) / 'test.sqlite3'),
+                'GENERATED_DIR': str(Path(tmp) / 'generated'),
+            })
 
-        response = app.test_client().get('/')
-        text = response.get_data(as_text=True)
+            response = app.test_client().get('/')
+            text = response.get_data(as_text=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('id="languageSelect"', text)
         self.assertIn('<option value="de">Deutsch</option>', text)
         self.assertIn('<option value="en">English</option>', text)
-        self.assertIn('data-i18n="generate"', text)
+        self.assertIn('data-i18n="prepareJob"', text)
 
 
 if __name__ == '__main__':

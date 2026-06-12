@@ -28,3 +28,7 @@ curl.exe http://localhost:8088/health
 ```
 
 Die erzeugten G-Code-Dateien liegen im Docker-Volume `grinder_grinder_data` und sind ueber die Download-Links in der Webapp abrufbar.
+
+Im selben Volume liegt die SQLite-Datenbank. Dadurch bleiben Vorlagen,
+Werkzeugbestand, Strategien und Auftragshistorie bei einem Container-Neustart
+erhalten.

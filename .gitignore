@@ -8,6 +8,10 @@ ollama.log
 
 *.ngc
 data/generated/
+data/*.sqlite3
+data/*.sqlite3-shm
+data/*.sqlite3-wal
+data/test-generated/
 
 build/
 dist/
